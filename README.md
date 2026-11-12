@@ -1,4 +1,4 @@
-# wakbbu (에신박 · VR/AR 텀프로젝트)
+# wakbbu (VR/AR 텀프로젝트)
 
 햅틱 AR 왁뿌볼: 실물 스펀지볼 + WEART 햅틱 장갑 + Meta Quest 패스스루(AR) + 파괴음으로 왁뿌볼 깨는 촉감을 재현하는 프로젝트
 
