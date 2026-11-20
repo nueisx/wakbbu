@@ -13,6 +13,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 | `WaxBall/WaxFinger.cs` | `enum WaxFinger { Thumb, Index, Middle }` (WEART TouchDIVER G1이 지원하는 세 손가락) |
 | `WaxBall/WaxBallContacts.cs` | 손가락 접촉점 입력 API(세 손가락, 위치 + 세기). 장비 의존 없음. 전체 grip 합치기(최댓값/평균) |
 | `../Interaction/FakeFingerContacts.cs` | 에디터 테스트용 가짜 손가락 3개(Scene 뷰에서 드래그, 세기는 Slider grip). 기본 배치는 세 손가락으로 집는 모양(엄지가 검지·중지 반대편) |
+| `WaxBall/WaxBallDamage.cs` | 손가락이 누른 자리의 파손 범위 모델(파손 흔적 최대 8개). 렌더링은 하지 않음. 균열을 붙일 손가락 선택 |
 | `WaxBall/WaxBallShellVisual.cs` | 상태와 grip을 읽어 셰이더 값(균열·파열·섞임)과 찌그러짐을 갱신. 균열 모양을 리셋마다 무작위로 뽑음 |
 | `WaxBall/WaxBallTempVisual.cs` | 초기 임시 시각 효과(상태별 색). 지금 빌더는 쓰지 않는다 |
 | `../Interaction/SliderGripInput.cs` | 에디터 테스트용 입력 어댑터(Slider → `SetGrip`, R 키/버튼 → 리셋) |
@@ -68,20 +69,35 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 - 껍질 색(`Shell Color`, 기본 청사과 초록)과 점토 색(`Clay Color`, 기본 흰색)은 머티리얼 Inspector에서 바꿀 수 있다.
 - Quest 성능을 위해 단일 Forward 패스, 텍스처 없이 절차적으로만 계산한다. 픽셀마다 Voronoi를 두 번 계산하므로 Quest에서 성능을 확인해야 한다.
 
+### 파손 범위: 누른 자리만 깨진다 (`WaxBallDamage`)
+
+실제로는 손가락으로 누른 부분의 왁스만 깨진다. 접촉점(`WaxBallContacts`)을 쓰는 씬에서는 다음과 같이 동작한다.
+
+- **파손 흔적(stamp)**: 상태가 Cracked 이상일 때, `damagePressureThreshold`(기본 0.3) 이상으로 누르는 손가락 아래에 흔적이 생긴다. 흔적은 공 로컬 방향 하나와 파손 정도(0~1)를 가진다. 최대 8개다.
+- **범위가 커지는 조건**: 세게 누르면(초당 `pressureDamageRate`) 파손 정도가 늘고, 주무르면(세기 변화량 × `kneadDamageGain`) 더 늘어난다. 반경은 `minRadiusDegrees`(20도)에서 `maxRadiusDegrees`(85도)까지 커지고 줄지 않는다.
+- **손가락을 떼도 흔적은 남는다.** 리셋(Idle)에서만 모두 지운다. 손가락이 흔적에서 `rebindAngleDegrees`(25도) 안이면 같은 흔적을 키우고, 벗어나면 새 흔적을 만든다. 자리가 없으면 가장 가까운 흔적에 합친다.
+- **Mixed에 가까워질수록 공 전체로 퍼진다.** `MixProgress`가 커지면 모든 흔적의 반경이 180도까지 늘고, 0.6~1에서 마스크가 공 전체를 덮는다.
+- **균열 두 줄의 시작점**: 첫 균열은 **가장 세게 누른 손가락 아래**에서, 두 번째 균열은 그 흔적이 아닌 곳에서 **두 번째로 세게 누른 손가락 아래**에서 시작한다. 한 번 붙은 균열은 옮기지 않는다. 세기가 같으면 검지, 중지, 엄지 순으로 먼저 붙는다(Slider 테스트에서는 세 손가락이 같은 세기라 첫 균열은 검지, 두 번째는 중지다). 붙은 손가락이 없는 균열은 보이지 않는다.
+- **셰이더 마스크**: 픽셀마다 흔적 8개까지의 거리로 "얼마나 깨졌나"(0~1)를 계산한다. 판 사이 경계는 경계마다 정해진 반경에서 하나씩 나타나서, 파손 범위가 원형 스텐실이 아니라 경계를 따라 번져 나가는 모양이다. Mixed에서 판이 줄어드는 것도 같은 마스크 안에서만 일어난다. 마스크 계산은 흔적 8개에 대한 내적이라 비용이 작다.
+- **접촉점이 없는 씬(Slider만 사용)**: `WaxBallContacts.HasReceivedContact`가 false이면(접촉점 입력이 한 번도 안 들어온 경우) 공 전체가 깨지는 예전 방식으로 동작하고, 균열 시작점은 리셋마다 무작위다. 개발 씬에서 이 방식을 보려면 Play 전에 `FakeFingers` 오브젝트를 끈다. 한 번 접촉점이 들어오면 그 실행 동안은 계속 접촉점 방식이다.
+- 디버그 텍스트의 `Damage: Local, n stamps`와 `Cracks: Index / Middle`로 흔적 수와 균열이 붙은 손가락을 확인한다.
+- 손가락마다 둥글게 들어가는 효과(세 손가락 각자)는 아직 첫 번째 균열의 위치 하나만 따른다(다음 단계).
+
 ### 셰이더 값과 `WaxBallShellVisual`
 
 `WaxBallShellVisual`이 `MaterialPropertyBlock`으로 매 프레임 넘기는 값:
 
 | 값 | 의미 |
 |---|---|
-| `_CrackAmount` | 균열 진행도(0~1). Cracked에서 grip에 따라 커지고, 한 번 간 값은 되돌아가지 않음(리셋에서만 0) |
+| `_CrackAmounts` | 균열 두 줄의 진행도(x: 첫 번째, y: 두 번째, 0~1). Cracked에서 grip에 따라 커지고, 한 번 간 값은 되돌아가지 않음(리셋에서만 0). 손가락에 붙지 않은 균열은 0 |
+| `_LocalDamage`, `_Stamps[8]` | 접촉점을 쓰는 씬이면 1. 파손 흔적 8개(방향 xyz, 반경의 코사인). 빈 칸은 코사인 2 |
 | `_BrokenAmount` | 파열 정도(0~1). Broken 진입 시 약 0.1초 만에 1로 올라가 "파삭" 하고 갈라짐 |
 | `_Fragment` | 판이 쪼개진 정도(0~1). 쥐는 힘과 `MixProgress`에 따라 늘고 줄지 않음 |
 | `_MixAmount` | `MixProgress`(0~1). Broken 동안 주무르면 0에서 올라가 Mixed 진입 시 1이 되므로 Mixed 상태는 mixed-02 모습(작은 초록 조각이 군데군데 남음)이다 |
 | `_DentDir`, `_DentAmount` | 둥글게 들어가는 방향(오브젝트 공간)과 정도. 정도는 Broken 이후 grip을 부드럽게 따라간다 |
 | `_Crack1A/B`, `_Crack2A/B` | 균열 두 줄의 모양 파라미터 |
 
-균열 파라미터(`A = 시작점 xyz + 길이 배율`, `B = 방향 각도, 휘어짐, 시드, 폭 배율`)는 **리셋(Idle)마다 줄마다 따로 무작위로 뽑는다.** 두 줄은 방향, 길이, 휘어짐, 폭이 서로 달라야 한다.
+균열 파라미터(`A = 시작점 xyz + 길이 배율`, `B = 방향 각도, 휘어짐, 시드, 폭 배율`)는 **리셋(Idle)마다 줄마다 따로 무작위로 뽑는다.** 접촉점을 쓰는 씬에서는 시작점(`A.xyz`)만 손가락 아래 흔적 위치로 대체된다. 두 줄은 방향, 길이, 휘어짐, 폭이 서로 달라야 한다.
 - 기본 시작점은 카메라 쪽(`randomStartForward`) 원뿔(`randomStartConeAngle`) 안에서 뽑고, 두 시작점은 `minStartSeparation` 이상 떨어진다.
 - 나중에 손가락 위치로 바꾸려면 `SetCrackStarts(방향1, 방향2)`(공 로컬 방향)를 호출한다. 호출하면 리셋해도 유지되고, `ClearCrackStarts()`로 해제한다. 오목하게 눌리는 중심도 첫 번째 시작점을 따른다.
 
