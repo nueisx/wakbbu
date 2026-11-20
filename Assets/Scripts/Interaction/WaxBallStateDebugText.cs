@@ -9,6 +9,8 @@ namespace Interaction
     {
         [SerializeField] private WaxBallStateMachine stateMachine;
         [SerializeField] private TMP_Text label;
+        [Tooltip("선택 사항. 연결하면 파손 흔적 수와 균열이 붙은 손가락을 표시한다.")]
+        [SerializeField] private WaxBallDamage damage;
 
         private int crunchCount;
         private string lastCrunchFinger = "-";
@@ -26,7 +28,16 @@ namespace Interaction
 
         private void Update()
         {
-            label.text = $"State: {stateMachine.State}\nGrip: {stateMachine.Grip:0.00}\nMix: {stateMachine.MixProgress:P0}\nCrunch: {crunchCount} ({lastCrunchFinger}, {lastCrunchStrength:0.00})";
+            string text = $"State: {stateMachine.State}\nGrip: {stateMachine.Grip:0.00}\nMix: {stateMachine.MixProgress:P0}\nCrunch: {crunchCount} ({lastCrunchFinger}, {lastCrunchStrength:0.00})";
+
+            if (damage != null)
+            {
+                string crack1 = damage.Crack1Finger.HasValue ? damage.Crack1Finger.Value.ToString() : "-";
+                string crack2 = damage.Crack2Finger.HasValue ? damage.Crack2Finger.Value.ToString() : "-";
+                text += $"\nDamage: {(damage.LocalMode ? "Local" : "Global")}, {damage.StampCount} stamps\nCracks: {crack1} / {crack2}";
+            }
+
+            label.text = text;
         }
     }
 }

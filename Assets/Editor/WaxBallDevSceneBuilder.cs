@@ -45,6 +45,10 @@ public static class WaxBallDevSceneBuilder
         SetRef(visual, "stateMachine", machine);
         var contacts = ball.AddComponent<WaxBallContacts>();
         SetRef(contacts, "stateMachine", machine);
+        var damage = ball.AddComponent<WaxBallDamage>();
+        SetRef(damage, "stateMachine", machine);
+        SetRef(damage, "contacts", contacts);
+        SetRef(visual, "damage", damage);
         CreateFakeFingers(ball.transform, contacts, machine);
 
         var canvasGo = new GameObject("DevCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -88,10 +92,11 @@ public static class WaxBallDevSceneBuilder
         labelRect.anchorMax = new Vector2(0f, 1f);
         labelRect.pivot = new Vector2(0f, 1f);
         labelRect.anchoredPosition = new Vector2(20f, -20f);
-        labelRect.sizeDelta = new Vector2(400f, 190f);
+        labelRect.sizeDelta = new Vector2(500f, 260f);
         var debugText = labelGo.AddComponent<WaxBallStateDebugText>();
         SetRef(debugText, "stateMachine", machine);
         SetRef(debugText, "label", label);
+        SetRef(debugText, "damage", damage);
 
         PlaceCamera(ball.transform.position);
 

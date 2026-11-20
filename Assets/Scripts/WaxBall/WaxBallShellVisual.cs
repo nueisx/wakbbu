@@ -4,14 +4,18 @@ namespace WaxBall
 {
     /// <summary>
     /// 왁스 껍질 시각 효과. 구조는 투명 고무층 > 왁스 껍질 > 흰 점토이고, 파편은 고무층 안에 갇혀 밖으로 튀지 않는다.
-    /// grip에 따른 찌그러짐, 균열(_CrackAmount), 파열(_BrokenAmount, _Fragment), 섞임(_MixAmount)을 셰이더에 넘긴다.
-    /// 균열의 시작점, 방향, 길이, 휘어짐은 리셋(Idle)마다 무작위로 바뀐다.
+    /// grip에 따른 찌그러짐, 균열(_CrackAmounts), 파열(_BrokenAmount, _Fragment), 섞임(_MixAmount)을 셰이더에 넘긴다.
+    /// 접촉점을 쓰는 씬(WaxBallDamage.LocalMode)에서는 파손 흔적 주변만 깨지고, 균열은 손가락 아래에서 시작한다.
+    /// 접촉점을 쓰지 않는 씬(Slider만 사용)에서는 공 전체가 깨지고, 균열의 시작점은 리셋(Idle)마다 무작위로 바뀐다.
+    /// 균열의 방향, 길이, 휘어짐은 어느 경우든 리셋마다 무작위로 바뀐다.
     /// 이벤트와 Grip/MixProgress 프로퍼티를 읽기만 하고 상태 판정은 하지 않는다.
     /// </summary>
     [RequireComponent(typeof(Renderer))]
     public class WaxBallShellVisual : MonoBehaviour
     {
         [SerializeField] private WaxBallStateMachine stateMachine;
+        [Tooltip("파손 범위 모델. 비워 두면 같은 오브젝트에서 찾고, 없으면 공 전체가 깨진다.")]
+        [SerializeField] private WaxBallDamage damage;
         [SerializeField, Range(0f, 0.5f)] private float maxSquash = 0.25f;
         [Tooltip("껍질이 깨진 뒤(Broken 이후)의 최대 찌그러짐. 껍질이 안 버티므로 maxSquash보다 크다.")]
         [SerializeField, Range(0f, 0.7f)] private float brokenSquash = 0.45f;
@@ -33,7 +37,9 @@ namespace WaxBall
         [SerializeField, Range(10f, 180f)] private float randomStartConeAngle = 70f;
         [SerializeField, Range(0f, 90f)] private float minStartSeparation = 35f;
 
-        private static readonly int CrackAmountId = Shader.PropertyToID("_CrackAmount");
+        private static readonly int CrackAmountsId = Shader.PropertyToID("_CrackAmounts");
+        private static readonly int LocalDamageId = Shader.PropertyToID("_LocalDamage");
+        private static readonly int StampsId = Shader.PropertyToID("_Stamps");
         private static readonly int BrokenAmountId = Shader.PropertyToID("_BrokenAmount");
         private static readonly int FragmentId = Shader.PropertyToID("_Fragment");
         private static readonly int MixAmountId = Shader.PropertyToID("_MixAmount");
@@ -57,6 +63,7 @@ namespace WaxBall
         private Vector3 crackStart2;
         private Vector4 crack1A, crack1B, crack2A, crack2B;
         private bool startsOverridden;
+        private readonly Vector4[] stamps = new Vector4[WaxBallDamage.MaxStamps];
 
         private void Awake()
         {
@@ -64,6 +71,7 @@ namespace WaxBall
             block = new MaterialPropertyBlock();
             baseScale = transform.localScale;
             if (stateMachine == null) stateMachine = GetComponentInParent<WaxBallStateMachine>();
+            if (damage == null) damage = GetComponent<WaxBallDamage>();
             RandomizeCracks();
         }
 
@@ -156,16 +164,45 @@ namespace WaxBall
 
         private void ApplyProperties()
         {
+            bool local = damage != null && damage.LocalMode;
+
+            // 두 번째 균열은 늦게 나타나고 더 짧다.
+            float amount1 = crackAmount;
+            float amount2 = Mathf.Clamp01((crackAmount - 0.3f) / 0.7f) * 0.75f;
+            Vector4 a1 = crack1A;
+            Vector4 a2 = crack2A;
+            Vector3 dentDirection = crackStart1;
+
             rend.GetPropertyBlock(block);
-            block.SetFloat(CrackAmountId, crackAmount);
+
+            if (local)
+            {
+                // 접촉점을 쓰면 균열은 손가락 아래에서 시작한다. 아직 붙은 손가락이 없으면 그 균열은 보이지 않는다.
+                if (damage.TryGetCrackAnchor(0, out Vector3 anchor1))
+                {
+                    a1 = new Vector4(anchor1.x, anchor1.y, anchor1.z, crack1A.w);
+                    dentDirection = anchor1;
+                }
+                else amount1 = 0f;
+
+                if (damage.TryGetCrackAnchor(1, out Vector3 anchor2))
+                    a2 = new Vector4(anchor2.x, anchor2.y, anchor2.z, crack2A.w);
+                else amount2 = 0f;
+
+                damage.FillShaderStamps(stamps, stateMachine.MixProgress);
+                block.SetVectorArray(StampsId, stamps);
+            }
+
+            block.SetFloat(LocalDamageId, local ? 1f : 0f);
+            block.SetVector(CrackAmountsId, new Vector4(amount1, amount2, 0f, 0f));
             block.SetFloat(BrokenAmountId, brokenAmount);
             block.SetFloat(FragmentId, fragmentAmount);
             block.SetFloat(MixAmountId, stateMachine.MixProgress);
-            block.SetVector(DentDirId, crackStart1);
+            block.SetVector(DentDirId, dentDirection);
             block.SetFloat(DentAmountId, dentAmount);
-            block.SetVector(Crack1AId, crack1A);
+            block.SetVector(Crack1AId, a1);
             block.SetVector(Crack1BId, crack1B);
-            block.SetVector(Crack2AId, crack2A);
+            block.SetVector(Crack2AId, a2);
             block.SetVector(Crack2BId, crack2B);
             rend.SetPropertyBlock(block);
         }

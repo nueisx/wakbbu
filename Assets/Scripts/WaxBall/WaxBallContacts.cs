@@ -38,6 +38,12 @@ namespace WaxBall
         private readonly FingerContact[] contacts = new FingerContact[MaxContacts];
 
         public WaxBallStateMachine StateMachine => stateMachine;
+
+        /// <summary>
+        /// 접촉점 입력이 한 번이라도 들어왔는가(리셋해도 유지). false면 접촉점을 쓰지 않는 씬(Slider만 사용)이다.
+        /// 이때 시각 효과는 공 전체가 깨지는 방식으로 동작한다.
+        /// </summary>
+        public bool HasReceivedContact { get; private set; }
         public GripAggregation Aggregation { get => aggregation; set => aggregation = value; }
         public bool DriveGrip { get => driveGrip; set => driveGrip = value; }
 
@@ -85,6 +91,7 @@ namespace WaxBall
             if (localPosition.sqrMagnitude < 1e-8f) return;
 
             pressure = Mathf.Clamp01(pressure);
+            HasReceivedContact = true;
             contacts[i] = new FingerContact
             {
                 active = true,
