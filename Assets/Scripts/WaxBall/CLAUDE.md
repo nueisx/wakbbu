@@ -35,7 +35,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 - 임계값(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`)은 하드코딩하지 않고 `[SerializeField]`로 노출한다. 값은 Interaction 담당이 정한다.
 - `SetGrip()`은 grip을 0~1로 clamp하고, 한 번에 큰 값이 들어와도 **중간 상태 이벤트를 빠뜨리지 않도록 한 단계씩** 진행한다.
 - Broken 이후에는 grip 변화량을 `KneadAccumulated`에 누적하고, 접촉점이 없는 씬의 `MixProgress = KneadAccumulated / kneadAmountToMix`(0~1)이다. 접촉점 씬은 깨진 면적과 흔적별 평균 섞임으로 판정한다(`mixAreaThreshold`, `mixAverageThreshold`, 3장).
-- **Crunched(WaxFinger finger, float strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
+- **Crunched(WaxFinger finger, float strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.5, 한 번 쥐었다 펴면 손가락마다 3~5번)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
   - 세기는 그 손가락의 세기 변화 속도로 정한다. `crunchFullSpeed`(기본 2/초) 이상이면 1, 가장 느리면 `crunchMinStrength`(기본 0.2).
   - C# `event Action<WaxFinger, float> Crunched`, Inspector `UnityEvent<WaxFinger, float> onCrunched`.
   - Broken에 막 진입한 순간의 변화는 세지 않는다. Mixed에서는 발생하지 않는다. `SetGrip`만으로는 발생하지 않는다.
@@ -83,7 +83,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 - **처음엔 작게**: `pressureDamageRate` 0.03(거의 0)이라 누르고만 있으면 첫 깨짐 이후 범위가 거의 안 커지고, 주무를 때(`kneadDamageGain` 0.4)만 커진다. 반경은 최대 55 + 번지기 10 = 65도라 한 흔적이 표면의 약 22%이고, 세 손가락이 같은 자리를 쥐면 40~50%에서 멈춘다. 80%에는 손가락을 여러 자리로 옮겨야 닿는다.
 - **깨진 면적과 섞임은 따로다.** `DamagedRatio`는 "판이 갈라진 범위"이고, 흔적마다 쌓은 주무른 양이 "쪼개짐과 흰색 정도"(섞임)다.
   - **면적**: `WaxBallDamage`가 공 표면의 균일한 표본점 512개(공 로컬) 중 흔적 반경 안에 든 비율을 `DamagedRatio`로 계산한다. 흔적 경계는 셰이더 마스크 0.5 지점이라 숫자와 화면이 맞는다.
-  - **흔적별 주무른 양**: Broken 이후, 흔적에 붙은 손가락의 세기 변화량이 그 흔적의 `knead`에 쌓인다. 흔적의 섞임 = `knead / kneadAmountToMix`(0~1, 기본 4.5). 새로 깬 자리는 섞임 0이라 항상 초록 판 + 흰 틈에서 시작한다.
+  - **흔적별 주무른 양**: Broken 이후, 흔적에 붙은 손가락의 세기 변화량이 그 흔적의 `knead`에 쌓인다. 흔적 하나에는 프레임마다 가장 많이 움직인 손가락 하나의 변화량만 쌓인다. 흔적의 섞임 = `knead / kneadAmountPerStamp`(0~1, `WaxBallDamage`, 기본 13.5 = 전체 기준 4.5의 3배). 새로 깬 자리는 섞임 0이라 항상 초록 판 + 흰 틈에서 시작한다.
   - **평균 섞임**(`AverageMix`): 깨진 표본점마다 가장 깊이 든 흔적의 섞임을 모아 면적 가중 평균을 낸다. `MixProgress`는 접촉점 씬에서 이 값이다(Broken 전에는 0). 디버그 텍스트의 `Mix` 줄도 이 값이다.
   - **Mixed 조건**: `DamagedRatio ≥ mixAreaThreshold`(기본 0.8) 그리고 `AverageMix ≥ mixAverageThreshold`(기본 0.9). 둘 다 `WaxBallStateMachine` Inspector에서 조절한다. 접촉점이 없는 씬은 예전처럼 전체 주무른 양(`kneadAmountToMix`)으로 판정한다.
   - **셰이더**: 판 줄어듦과 쪼개짐은 픽셀이 속한 흔적의 섞임(`_StampMix[8]`)을 따른다. Mixed 직전(면적 기준 이상, 평균 섞임이 기준의 `mixFillStart`=0.85 이상)에는 `_MixFill`이 남은 부분까지 채운다.

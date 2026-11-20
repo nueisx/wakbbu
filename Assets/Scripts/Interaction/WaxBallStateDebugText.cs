@@ -15,6 +15,7 @@ namespace Interaction
         [SerializeField] private bool showFps;
 
         private int crunchCount;
+        private readonly System.Collections.Generic.Queue<float> crunchTimes = new System.Collections.Generic.Queue<float>();
         private string lastCrunchFinger = "-";
         private float lastCrunchStrength;
         private float smoothedFrameTime = 1f / 72f;
@@ -36,6 +37,7 @@ namespace Interaction
         {
             if (next != WaxBallState.Idle || prev < WaxBallState.Cracked) return;
             crunchCount = 0;
+            crunchTimes.Clear();
             lastCrunchFinger = "-";
             lastCrunchStrength = 0f;
         }
@@ -43,13 +45,15 @@ namespace Interaction
         private void HandleCrunched(WaxFinger finger, float strength)
         {
             crunchCount++;
+            crunchTimes.Enqueue(Time.unscaledTime);
             lastCrunchFinger = finger.ToString();
             lastCrunchStrength = strength;
         }
 
         private void Update()
         {
-            string text = $"State: {stateMachine.State}\nGrip: {stateMachine.Grip:0.00}\nMix: {stateMachine.MixProgress:P0}\nCrunch: {crunchCount} ({lastCrunchFinger}, {lastCrunchStrength:0.00})";
+            while (crunchTimes.Count > 0 && Time.unscaledTime - crunchTimes.Peek() > 1f) crunchTimes.Dequeue();
+            string text = $"State: {stateMachine.State}\nGrip: {stateMachine.Grip:0.00}\nMix: {stateMachine.MixProgress:P0}\nCrunch: {crunchCount} ({lastCrunchFinger}, {lastCrunchStrength:0.00}), {crunchTimes.Count}/s";
 
             if (damage != null)
             {

@@ -277,6 +277,7 @@ MonoBehaviour:
   maxRadiusDegrees: 55
   pressureDamageRate: 0.03
   kneadDamageGain: 0.4
+  kneadAmountPerStamp: 13.5
   spreadDegreesPerKnead: 2
   maxSpreadDegrees: 10
   rebindAngleDegrees: 25
@@ -312,7 +313,8 @@ MonoBehaviour:
   breakThreshold: 0.85
   kneadAmountToMix: 4.5
   mixAreaThreshold: 0.8
-  crunchGripStep: 0.2
+  crunchGripStep: 0.5
+  crunchMinInterval: 0.1
   crunchMinStrength: 0.2
   crunchFullSpeed: 2
   onStateChanged:

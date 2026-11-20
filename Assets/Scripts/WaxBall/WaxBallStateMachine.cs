@@ -41,7 +41,9 @@ namespace WaxBall
 
         [Header("Crunched (Broken 상태에서 손가락으로 주무를 때)")]
         [Tooltip("한 손가락의 세기 변화량이 이만큼 쌓일 때마다 그 손가락에 Crunched를 한 번 보낸다.")]
-        [SerializeField, Min(0.01f)] private float crunchGripStep = 0.2f;
+        [SerializeField, Min(0.01f)] private float crunchGripStep = 0.5f;
+        [Tooltip("한 손가락의 Crunched 최소 간격(초). 이보다 빨리 쌓여도 간격이 지날 때까지 기다린다. 장갑 진동이 떨림이 되지 않게 한다.")]
+        [SerializeField, Min(0f)] private float crunchMinInterval = 0.1f;
         [Tooltip("가장 천천히 주물렀을 때의 세기.")]
         [SerializeField, Range(0f, 1f)] private float crunchMinStrength = 0.2f;
         [Tooltip("이 속도(세기/초) 이상으로 주무르면 세기가 1이 된다.")]
@@ -63,6 +65,7 @@ namespace WaxBall
         private readonly float[] fingerTime = new float[FingerCount];
         private readonly float[] fingerSpeed = new float[FingerCount];
         private readonly float[] fingerCrunchAccumulated = new float[FingerCount];
+        private readonly float[] fingerLastCrunchTime = new float[FingerCount];
         private readonly bool[] fingerSkipDelta = new bool[FingerCount];
 
         public WaxBallState State { get; private set; } = WaxBallState.Idle;
@@ -146,8 +149,9 @@ namespace WaxBall
             if (State != WaxBallState.Broken) return;
 
             fingerCrunchAccumulated[i] += delta;
-            if (fingerCrunchAccumulated[i] >= crunchGripStep)
+            if (fingerCrunchAccumulated[i] >= crunchGripStep && Time.time - fingerLastCrunchTime[i] >= crunchMinInterval)
             {
+                fingerLastCrunchTime[i] = Time.time;
                 fingerCrunchAccumulated[i] %= crunchGripStep;
                 RaiseCrunched(finger);
             }
@@ -174,6 +178,7 @@ namespace WaxBall
                 fingerPressure[i] = 0f;
                 fingerSpeed[i] = 0f;
                 fingerCrunchAccumulated[i] = 0f;
+                fingerLastCrunchTime[i] = float.NegativeInfinity;
                 fingerSkipDelta[i] = false;
             }
             ChangeState(WaxBallState.Idle);

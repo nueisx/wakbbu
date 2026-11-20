@@ -35,6 +35,11 @@ namespace WaxBall
         [Tooltip("손가락 세기가 1만큼 변할 때(주무를 때) 늘어나는 파손 정도.")]
         [SerializeField, Min(0f)] private float kneadDamageGain = 0.4f;
 
+        [Header("섞임 (흔적별 주무른 양)")]
+        [Tooltip("한 흔적이 완전히 섞이기까지 필요한 주무른 양(세기 변화량 합). 흔적 하나에는 가장 많이 움직인 손가락 하나의 변화량만 쌓인다. " +
+                 "기본 13.5(전체 기준 4.5의 3배)라서 몇 번 주무르는 동안 초록 판 + 흰 틈이 보인다.")]
+        [SerializeField, Min(0.1f)] private float kneadAmountPerStamp = 13.5f;
+
         [Header("번지기 (아주 약하게)")]
         [Tooltip("같은 자리를 주물러 세기가 1만큼 변할 때 흔적 반경이 더 넓어지는 각도(도). 0이면 꺼진다.")]
         [SerializeField, Min(0f)] private float spreadDegreesPerKnead = 2f;
@@ -63,6 +68,7 @@ namespace WaxBall
         private int crack1Stamp = -1;
         private int crack2Stamp = -1;
         private bool ratioDirty;
+        private readonly float[] stampKneadStep = new float[MaxStamps];
 
         // 표면 면적 계산용 균일 표본점(공 로컬). 흔적 반경 안에 든 비율이 파손 면적 비율이다.
         private const int SampleCount = 512;
@@ -127,6 +133,7 @@ namespace WaxBall
             // 껍질이 멀쩡한 동안(Cracked 전)에는 파손이 없다.
             bool damaging = stateMachine.State >= WaxBallState.Cracked;
             float dt = Time.deltaTime;
+            System.Array.Clear(stampKneadStep, 0, MaxStamps);
 
             for (int i = 0; i < WaxBallContacts.MaxContacts; i++)
             {
@@ -154,12 +161,16 @@ namespace WaxBall
                 if (stamps[s].damage != before || stamps[s].spread != beforeSpread) ratioDirty = true;
 
                 // 깨진 뒤(Broken 이후)에만 주무른 양이 쌓인다. 쌓이는 곳은 이 손가락이 붙은 흔적뿐이다.
-                if (stateMachine.State >= WaxBallState.Broken && change > 0f)
-                {
-                    stamps[s].knead += change;
-                    ratioDirty = true;
-                }
+                // 같은 흔적에 여러 손가락이 붙어 있어도 이번 프레임에는 가장 많이 움직인 손가락 하나만 센다.
+                if (stateMachine.State >= WaxBallState.Broken) stampKneadStep[s] = Mathf.Max(stampKneadStep[s], change);
                 lastPressure[i] = pressure;
+            }
+
+            for (int i = 0; i < MaxStamps; i++)
+            {
+                if (stampKneadStep[i] <= 0f) continue;
+                stamps[i].knead += stampKneadStep[i];
+                ratioDirty = true;
             }
 
             if (damaging) AssignCracks();
@@ -182,7 +193,7 @@ namespace WaxBall
         // 흔적마다 섞임: 주무른 양 / kneadAmountToMix (0~1)
         private float StampMix(in Stamp stamp)
         {
-            return Mathf.Clamp01(stamp.knead / stateMachine.KneadAmountToMix);
+            return Mathf.Clamp01(stamp.knead / kneadAmountPerStamp);
         }
 
         // 셰이더에서 "깨졌다"고 보이기 시작하는 경계(마스크 0.5, 안쪽 45% 구간 중간)까지를 면적으로 센다.

@@ -111,7 +111,7 @@
 | 이벤트 | 언제 | 값 |
 |---|---|---|
 | `StateChanged(prev, next)` | 상태가 바뀔 때마다 (리셋 포함) | 이전·다음 `WaxBallState` |
-| `Crunched(finger, strength)` | **Broken 상태에서** 손가락으로 주무를 때, 그 손가락의 세기 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 | `WaxFinger`(`Thumb`, `Index`, `Middle`), 세기 0~1 (빠르게 주무를수록 큼) |
+| `Crunched(finger, strength)` | **Broken 상태에서** 손가락으로 주무를 때, 그 손가락의 세기 변화량이 `crunchGripStep`(기본 0.5, 쥐었다 펴면 손가락마다 3~5번)만큼 쌓일 때마다. 손가락별 최소 간격 `crunchMinInterval`(기본 0.1초) | `WaxFinger`(`Thumb`, `Index`, `Middle`), 세기 0~1 (빠르게 주무를수록 큼) |
 
 - C#: `event Action<WaxBallState, WaxBallState> StateChanged`, `event Action<WaxFinger, float> Crunched`
 - Inspector: `UnityEvent<WaxBallState> onStateChanged`, `UnityEvent<WaxFinger, float> onCrunched`
