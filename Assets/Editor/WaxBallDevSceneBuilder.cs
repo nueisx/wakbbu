@@ -125,7 +125,7 @@ public static class WaxBallDevSceneBuilder
 
     // 공 주변에 가짜 손가락 3개를 만든다. Scene 뷰에서 Move 도구로 드래그해 접촉 위치를 옮긴다.
     // 공의 자식으로 두지 않는다(공은 grip에 따라 찌그러지므로 자식도 같이 변형된다).
-    private static void CreateFakeFingers(Transform ball, WaxBallContacts contacts, WaxBallStateMachine machine)
+    internal static void CreateFakeFingers(Transform ball, WaxBallContacts contacts, WaxBallStateMachine machine)
     {
         var root = new GameObject("FakeFingers");
         var fake = root.AddComponent<FakeFingerContacts>();
@@ -164,7 +164,7 @@ public static class WaxBallDevSceneBuilder
         cam.nearClipPlane = 0.01f;
     }
 
-    private static Material LoadOrCreateShellMaterial()
+    internal static Material LoadOrCreateShellMaterial()
     {
         const string dir = "Assets/Materials";
         const string path = dir + "/WaxShell.mat";
@@ -185,7 +185,7 @@ public static class WaxBallDevSceneBuilder
         return material;
     }
 
-    private static void SetRef(Object target, string field, Object value)
+    internal static void SetRef(Object target, string field, Object value)
     {
         var so = new SerializedObject(target);
         so.FindProperty(field).objectReferenceValue = value;
