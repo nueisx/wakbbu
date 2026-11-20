@@ -1,13 +1,16 @@
 // 왁뿌볼 껍질용 URP 셰이더. 기준은 docs/references/README.md의 실제 왁뿌볼 사진이다.
-// 구조: 투명한 고무층 > 색깔 있는 왁스 껍질(납작한 판) > 흰 점토. 이 셰이더는 고무층 아래로 보이는 모습을 그린다.
-// - Idle/Pressed: 매끈한 단색 공 + 젖은 듯한 하이라이트 위주의 광택. 균열 없음.
+// 구조: 투명 고무 케이스 > 색깔 있는 왁스 껍질(납작한 판) > 흰 점토. 이 셰이더는 케이스 아래로 보이는 모습을 그린다.
+// - Idle/Pressed: 매끈한 단색 공. 균열 없음.
 // - Cracked(_CrackAmount): 판은 그대로이고 삐뚤빼뚤한 균열 두 줄을 따라 흰 점토가 불룩하게 비집고 나온다.
 //   균열의 시작점, 방향, 길이, 휘어짐은 C#(WaxBallShellVisual)이 리셋마다 무작위로 넣는다(_Crack1A/B, _Crack2A/B).
 // - Broken(_BrokenAmount, _Fragment): 큰 판 몇 개로 갈라지고 틈은 흰 점토 색이다.
-//   _Fragment가 커질수록 큰 판 안에 작은 판 경계가 하나씩 생겨 더 잘게 쪼개진다. 손가락 쪽으로 오목하게 눌린다(_DentDir).
+//   _Fragment가 커질수록 큰 판 안에 작은 판 경계가 하나씩 생겨 더 잘게 쪼개진다.
+// - Mixed(_MixAmount = MixProgress): 작은 판 중 일부(_PieceFraction)만 가장자리가 줄어든 작은 조각으로 남고 나머지는 점토에 묻힌다.
+//   흰색이 표면 대부분을 덮고(mixed), 끝에는 표면의 약 20%에 작고 납작한 초록 조각이 군데군데 남는다(mixed-02).
+//   점토는 고무에 눌려 매끈하고, 실루엣과 표면에 노이즈 요철은 없다. grip에 따라 손가락 쪽만 둥글게 들어간다(_DentDir).
+// - 투명 고무 케이스(docs/references/casing.png)는 가장자리 프레넬과 실루엣 가장자리의 투명한 테두리로만 표현한다.
+//   하이라이트(창 모양 반사, 광원 반사)와 표면 물결, 환경 반사는 부자연스럽거나 AR 배경(실제 방)과 맞지 않아 쓰지 않는다.
 // 균열과 틈 선은 화면에서 1px 아래로 가늘어지지 않게 보정한다.
-// Mixed(흰색이 표면을 덮고 작은 조각만 남음)는 아직 구현하지 않았다.
-// 환경 반사는 쓰지 않는다. AR에서는 배경이 실제 방이므로 광택은 하이라이트만으로 낸다.
 // Quest 성능을 위해 단일 Forward 패스, 텍스처 없이 절차적으로만 계산한다.
 Shader "WaxBall/WaxShell"
 {
@@ -33,20 +36,22 @@ Shader "WaxBall/WaxShell"
         _PlateGapWidth("Plate Gap Width (틈 전체 폭, 구 반지름 기준)", Range(0.02, 0.4)) = 0.2
         _DentDir("Dent Direction (오브젝트 공간)", Vector) = (0, 0, -1, 0)
         _DentAmount("Dent Amount", Range(0, 1)) = 0
-        _DoughAmp("Dough Irregularity", Range(0, 0.1)) = 0.04
+
+        [Header(Mixed)]
+        _MixAmount("Mix Amount (MixProgress)", Range(0, 1)) = 0
+        _PieceFraction("Piece Fraction (Mixed에서 남는 작은 판의 비율)", Range(0.05, 0.9)) = 0.45
+        _PieceInset("Piece Inset (남는 조각이 가장자리에서 줄어든 폭, 클수록 작은 조각)", Range(0.005, 0.08)) = 0.03
 
         [Header(Edge and Clay)]
         _RimWidth("Rim Width (판 가장자리 밝은 테두리)", Range(0, 0.1)) = 0.03
         _RimBrightness("Rim Brightness", Range(0, 1)) = 0.45
-        _BulgeStrength("Clay Bulge (점토가 불룩한 정도)", Range(0, 1.5)) = 0.9
+        _BulgeStrength("Clay Bulge (틈 가장자리 음영, 표면 요철처럼 보이므로 작게)", Range(0, 1.5)) = 0.1
         _MinPixelWidth("Min Pixel Width (선 최소 굵기, px)", Range(0, 3)) = 1
 
-        [Header(Gloss)]
-        _Gloss("Gloss", Range(8, 400)) = 160
-        _SpecStrength("Specular Strength", Range(0, 2)) = 1
-        _WindowHighlight("Window Highlight (시점 기준 창 모양 하이라이트)", Range(0, 2)) = 0.8
+        [Header(Casing)]
         _FresnelPower("Fresnel Power", Range(1, 8)) = 3
-        _FresnelStrength("Fresnel Strength", Range(0, 0.3)) = 0.08
+        _FresnelStrength("Fresnel Strength", Range(0, 0.6)) = 0.25
+        _CasingEdge("Casing Edge (실루엣 가장자리 투명 테두리)", Range(0, 1)) = 0.5
     }
 
     SubShader
@@ -81,16 +86,16 @@ Shader "WaxBall/WaxShell"
                 float _PlateGapWidth;
                 float4 _DentDir;
                 float _DentAmount;
-                float _DoughAmp;
+                float _MixAmount;
+                float _PieceFraction;
+                float _PieceInset;
                 float _RimWidth;
                 float _RimBrightness;
                 float _BulgeStrength;
                 float _MinPixelWidth;
-                float _Gloss;
-                float _SpecStrength;
-                float _WindowHighlight;
                 float _FresnelPower;
                 float _FresnelStrength;
+                float _CasingEdge;
             CBUFFER_END
 
             struct Attributes
@@ -118,6 +123,8 @@ Shader "WaxBall/WaxShell"
             {
                 float edge;      // 가장 가까운 두 셀 경계까지의 거리(셀 단위)
                 float lineHash;  // 경계 선의 무작위 값(같은 선은 항상 같은 값)
+                float cellHash;  // 가장 가까운 셀의 무작위 값(Mixed에서 어떤 판이 남는지 정한다)
+                float cellHash2; // 두 번째 무작위 값(조각 크기, 사라지는 시점)
                 float3 grad;     // 셀1 → 셀2 방향
             };
 
@@ -176,6 +183,8 @@ Shader "WaxBall/WaxShell"
                 result.edge = sqrt(d2) - sqrt(d1);
                 // 두 셀 id의 합은 순서와 무관하므로 같은 경계 선은 항상 같은 값을 갖는다.
                 result.lineHash = Hash1(id1 + id2);
+                result.cellHash = Hash1(id1 * 1.37 + 11.1);
+                result.cellHash2 = Hash1(id1 * 2.71 + 5.3);
                 result.grad = normalize(v2 - v1 + 1e-5);
                 return result;
             }
@@ -228,7 +237,9 @@ Shader "WaxBall/WaxShell"
             }
 
             // 판 사이 틈(Voronoi 경계). gate: 이 경계가 얼마나 나타났는지(0~1), 클수록 넓다.
-            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed)
+            // isFine: 작은 판 층이면 1. Mixed에서 작은 판 중 일부(_PieceFraction)만 작은 조각으로 남고 나머지는 점토에 묻혀 사라진다.
+            // 큰 판 층(isFine = 0)의 틈은 섞일수록 가늘어져서 남은 조각을 자르지 않는다.
+            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine)
             {
                 // 셀 단위 거리를 구 반지름 단위 거리로 바꾼다(경계까지 거리 ≈ edge의 절반).
                 float dBase = 0.5 * v.edge / scale;
@@ -236,11 +247,24 @@ Shader "WaxBall/WaxShell"
                 float d = dBase + (Noise3(q * 9.0 + seed) - 0.5) * 0.03;
 
                 float widthVariation = lerp(0.5, 1.5, Noise3(q * 4.0 + seed * 1.7));
-                float w = _PlateGapWidth * 0.5 * widthScale * gate * widthVariation;
+                float wBase = _PlateGapWidth * 0.5 * widthScale * gate * widthVariation;
+                float w = wBase * (1.0 - _MixAmount * lerp(0.85, 1.0, isFine));
+                float wMix = 0.0;
 
-                float inside = step(0.001, gate) * step(0.001, _BrokenAmount);
+                if (isFine > 0.5)
+                {
+                    // 남는 판은 가장자리에서 조금씩 줄어 작은 조각이 되고, 나머지는 셀 크기를 넘을 때까지 줄어 사라진다.
+                    float survive = step(1.0 - _PieceFraction, v.cellHash);
+                    float inset = _PieceInset * lerp(0.6, 1.4, v.cellHash2);
+                    float vanish = (0.7 / scale) / (0.3 + 0.65 * v.cellHash2);
+                    wMix = _MixAmount * lerp(vanish, inset, survive);
+                    w = max(w, wMix);
+                }
+
+                float inside = step(0.001, gate + wMix) * step(0.001, _BrokenAmount);
+                float rimW = _RimWidth * lerp(1.0, lerp(1.0, 0.35, _MixAmount), isFine);
                 float3 away = -(v.grad - dot(v.grad, q) * q);
-                return MakeGap(d, px, w, inside, _RimWidth, normalize(away + 1e-5));
+                return MakeGap(d, px, w, inside, rimW, normalize(away + 1e-5));
             }
 
             Varyings vert(Attributes input)
@@ -252,10 +276,9 @@ Shader "WaxBall/WaxShell"
 
                 if (_BrokenAmount > 0.001)
                 {
-                    // 껍질이 버티지 않으니 손가락 쪽이 오목하게 눌리고, 실루엣은 반죽처럼 불규칙해진다.
-                    float dentMask = smoothstep(0.35, 0.95, dot(normalOS, normalize(_DentDir.xyz)));
-                    float dough = (Noise3(unitPos * 1.7 + 4.1) - 0.5) * 2.0 * _DoughAmp * _BrokenAmount;
-                    positionOS += normalOS * (dough * 0.5 - dentMask * _DentAmount * 0.17);
+                    // 고무 케이스가 감싸고 있어 실루엣은 매끈한 구에 가깝다. grip에 따라 손가락 쪽만 둥글게 들어간다.
+                    float dentMask = smoothstep(0.3, 1.0, dot(normalOS, normalize(_DentDir.xyz)));
+                    positionOS -= normalOS * dentMask * _DentAmount * 0.17;
                 }
 
                 Varyings output;
@@ -280,8 +303,8 @@ Shader "WaxBall/WaxShell"
                 VoronoiResult plateCells = Voronoi(q * _PlateScale);
                 VoronoiResult fineCells = Voronoi(q * fineScale);
                 float fineGate = saturate((_Fragment - fineCells.lineHash * 0.9) * 5.0) * _BrokenAmount;
-                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1);
-                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9);
+                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1, 0.0);
+                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0);
 
                 float cover = max(max(crack1.cover, crack2.cover), max(plate0.cover, plate1.cover));
                 float rim = max(max(crack1.rim, crack2.rim), max(plate0.rim, plate1.rim));
@@ -289,7 +312,7 @@ Shader "WaxBall/WaxShell"
 
                 // 손가락 쪽 오목한 면은 법선도 중심 쪽으로 살짝 기울인다.
                 float3 dentDir = normalize(_DentDir.xyz);
-                float dentMask = smoothstep(0.35, 0.95, dot(q, dentDir));
+                float dentMask = smoothstep(0.3, 1.0, dot(q, dentDir));
                 float3 dentTilt = (dentDir - dot(dentDir, q) * q) * dentMask * (1.0 - dentMask) * 4.0 * _DentAmount * 0.6;
 
                 // 점토가 틈에서 불룩 튀어나온 느낌: 틈 안쪽 법선을 판 쪽으로 기울인다.
@@ -300,20 +323,22 @@ Shader "WaxBall/WaxShell"
                 half3 albedo = lerp(_ShellColor.rgb, rimColor, rim);
                 albedo = lerp(albedo, _ClayColor.rgb, cover);
 
-                // 투명 고무층의 젖은 듯한 광택: 주 광원 하이라이트 + 시점 기준 창 하이라이트 + 약한 프레넬
+                // 판은 광원 방향에 따라 음영이 지지만, 점토는 광원 색(기본 조명은 따뜻한 크림색)과 무관하게
+                // 깨끗한 흰색으로(회색 음영 없이) 비춘다.
                 Light mainLight = GetMainLight();
                 half3 diffuse = mainLight.color * saturate(dot(normal, mainLight.direction)) * 0.8
                               + SampleSH(normal);
+                half wrap = dot(normal, mainLight.direction) * 0.5 + 0.5;
+                half3 softDiffuse = half3(1, 1, 1) * lerp(0.9, 1.0, wrap);
+                diffuse = lerp(diffuse, softDiffuse, cover);
 
-                float3 halfDir = normalize(mainLight.direction + viewDir);
-                half3 specular = mainLight.color * pow(saturate(dot(normal, halfDir)), _Gloss) * _SpecStrength;
+                // 가장자리: 고무 두께가 비치는 밝고 투명한 테두리와 가는 가장자리 선(하이라이트는 없다)
+                half grazing = 1.0 - saturate(dot(normal, viewDir));
+                half3 edgeTint = half3(0.9, 0.96, 1.0);
+                half3 edge = edgeTint * (pow(grazing, _FresnelPower) * _FresnelStrength
+                                         + smoothstep(0.78, 0.97, grazing) * _CasingEdge * 0.4);
 
-                float3 normalVS = TransformWorldToViewDir(normal);
-                half3 window = pow(saturate(dot(normalVS, normalize(float3(-0.4, 0.55, 0.75)))), _Gloss * 0.5) * _WindowHighlight;
-
-                half fresnel = pow(1.0 - saturate(dot(normal, viewDir)), _FresnelPower) * _FresnelStrength;
-
-                return half4(albedo * diffuse + specular + window + fresnel, 1);
+                return half4(albedo * diffuse + edge, 1);
             }
             ENDHLSL
         }

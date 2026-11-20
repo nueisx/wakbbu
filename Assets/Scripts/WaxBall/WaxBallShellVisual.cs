@@ -22,8 +22,10 @@ namespace WaxBall
         [SerializeField, Min(0.1f)] private float brokenRampSpeed = 10f;
         [Tooltip("판이 더 잘게 쪼개지는 속도(1/초).")]
         [SerializeField, Min(0.1f)] private float fragmentSpeed = 1.5f;
-        [Tooltip("손가락 쪽으로 오목하게 눌리는 정도.")]
-        [SerializeField, Range(0f, 1f)] private float dentStrength = 0.8f;
+        [Tooltip("grip이 최대일 때 손가락 쪽이 둥글게 들어가는 정도.")]
+        [SerializeField, Range(0f, 1f)] private float dentStrength = 0.5f;
+        [Tooltip("오목한 정도가 grip을 따라가는 속도.")]
+        [SerializeField, Min(1f)] private float dentFollowSpeed = 12f;
 
         [Header("균열 시작점 (무작위)")]
         [Tooltip("무작위 시작점을 뽑을 때 중심이 되는 방향(공 로컬 좌표). 개발 씬 카메라 쪽이 -z이다.")]
@@ -48,6 +50,7 @@ namespace WaxBall
         private float crackAmount;
         private float brokenAmount;
         private float fragmentAmount;
+        private float dentAmount;
 
         // 셰이더에 넘기는 균열 파라미터. A = (시작점 xyz, 길이 배율), B = (방향 각도, 휘어짐, 시드, 폭 배율)
         private Vector3 crackStart1;
@@ -109,6 +112,7 @@ namespace WaxBall
                 crackAmount = 0f;
                 brokenAmount = 0f;
                 fragmentAmount = 0f;
+                dentAmount = 0f;
                 RandomizeCracks();
             }
         }
@@ -138,6 +142,10 @@ namespace WaxBall
             bool broken = stateMachine.State >= WaxBallState.Broken;
             brokenAmount = Mathf.MoveTowards(brokenAmount, broken ? 1f : 0f, brokenRampSpeed * Time.deltaTime);
 
+            // 껍질이 깨진 뒤에는 grip에 따라 손가락 쪽이 둥글게 들어간다(손에 든 스펀지 공이 눌리는 것과 맞춘다).
+            float dentTarget = broken ? stateMachine.Grip * dentStrength : 0f;
+            dentAmount = Mathf.Lerp(dentAmount, dentTarget, 1f - Mathf.Exp(-dentFollowSpeed * Time.deltaTime));
+
             if (!broken) return;
 
             // 쥐는 힘과 주무른 양이 늘수록 판이 잘게 쪼개진다. 한 번 쪼개진 판은 다시 합쳐지지 않는다.
@@ -154,7 +162,7 @@ namespace WaxBall
             block.SetFloat(FragmentId, fragmentAmount);
             block.SetFloat(MixAmountId, stateMachine.MixProgress);
             block.SetVector(DentDirId, crackStart1);
-            block.SetFloat(DentAmountId, brokenAmount * dentStrength);
+            block.SetFloat(DentAmountId, dentAmount);
             block.SetVector(Crack1AId, crack1A);
             block.SetVector(Crack1BId, crack1B);
             block.SetVector(Crack2AId, crack2A);
