@@ -9,7 +9,7 @@ namespace Interaction
     {
         [SerializeField] private WaxBallStateMachine stateMachine;
         [SerializeField] private TMP_Text label;
-        [Tooltip("선택 사항. 연결하면 파손 흔적 수와 균열이 붙은 손가락을 표시한다.")]
+        [Tooltip("선택 사항. 비워 두면 같은 공에서 자동으로 찾는다. 연결하면 파손 흔적 수와 균열이 붙은 손가락을 표시한다.")]
         [SerializeField] private WaxBallDamage damage;
         [Tooltip("켜면 FPS와 프레임 간격(ms)을 표시한다. 화면 주사율 기준이라 GPU 여유는 OVR Metrics Tool로 따로 본다.")]
         [SerializeField] private bool showFps;
@@ -19,6 +19,12 @@ namespace Interaction
         private string lastCrunchFinger = "-";
         private float lastCrunchStrength;
         private float smoothedFrameTime = 1f / 72f;
+
+        private void Awake()
+        {
+            // 연결이 빠져 있어도 같은 공의 WaxBallDamage를 찾아 파손 줄을 표시한다.
+            if (damage == null && stateMachine != null) damage = stateMachine.GetComponent<WaxBallDamage>();
+        }
 
         private void OnEnable()
         {
