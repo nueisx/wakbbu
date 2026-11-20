@@ -270,6 +270,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 963f4b2162e644bc3a47e461d5c2d4aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  tuning: {fileID: 11400000, guid: 32a7712d345994dfe95f660ad90c90a6, type: 2}
   stateMachine: {fileID: 219718808}
   contacts: {fileID: 219718807}
 --- !u!114 &219718807
@@ -299,6 +300,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93b55df814ef74557a0fe29e621deb84, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  tuning: {fileID: 11400000, guid: 32a7712d345994dfe95f660ad90c90a6, type: 2}
   onStateChanged:
     m_PersistentCalls:
       m_Calls: []
@@ -317,6 +319,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 72efc51f259394ef99bca7c7033d9f8d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  tuning: {fileID: 11400000, guid: 32a7712d345994dfe95f660ad90c90a6, type: 2}
   stateMachine: {fileID: 219718808}
   damage: {fileID: 219718806}
   randomStartForward: {x: 0, y: 0, z: -1}
