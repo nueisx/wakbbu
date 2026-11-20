@@ -10,9 +10,23 @@ namespace Interaction
         [SerializeField] private WaxBallStateMachine stateMachine;
         [SerializeField] private TMP_Text label;
 
+        private int crunchCount;
+        private string lastCrunchFinger = "-";
+        private float lastCrunchStrength;
+
+        private void OnEnable() => stateMachine.Crunched += HandleCrunched;
+        private void OnDisable() => stateMachine.Crunched -= HandleCrunched;
+
+        private void HandleCrunched(WaxFinger finger, float strength)
+        {
+            crunchCount++;
+            lastCrunchFinger = finger.ToString();
+            lastCrunchStrength = strength;
+        }
+
         private void Update()
         {
-            label.text = $"State: {stateMachine.State}\nGrip: {stateMachine.Grip:0.00}\nMix: {stateMachine.MixProgress:P0}";
+            label.text = $"State: {stateMachine.State}\nGrip: {stateMachine.Grip:0.00}\nMix: {stateMachine.MixProgress:P0}\nCrunch: {crunchCount} ({lastCrunchFinger}, {lastCrunchStrength:0.00})";
         }
     }
 }
