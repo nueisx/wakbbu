@@ -1,23 +1,52 @@
-// 왁뿌볼 껍질용 URP 셰이더. 구조는 고무막 > 왁스 껍질 > 속 점토이고, 이 셰이더는 고무막 아래 왁스 껍질의 모습을 그린다.
-// _CrackAmount(0~1): Voronoi 균열 선이 하나씩 늘어난다.
-// _BrokenAmount(0~1): 균열 칸(판)마다 높이와 기울기가 어긋나 판이 갈라진 것처럼 울퉁불퉁해지고, 실루엣도 불규칙해진다.
-// _MixAmount(0~1): 균열 칸이 잘게 쪼개져(Grain Scale Multiplier) 오돌토돌한 알갱이 질감이 된다.
+// 왁뿌볼 껍질용 URP 셰이더. 기준은 docs/references/README.md의 실제 왁뿌볼 사진이다.
+// 구조: 투명한 고무층 > 색깔 있는 왁스 껍질(납작한 판) > 흰 점토. 이 셰이더는 고무층 아래로 보이는 모습을 그린다.
+// - Idle/Pressed: 매끈한 단색 공 + 젖은 듯한 하이라이트 위주의 광택. 균열 없음.
+// - Cracked(_CrackAmount): 판은 그대로이고 삐뚤빼뚤한 균열 두 줄을 따라 흰 점토가 불룩하게 비집고 나온다.
+//   균열의 시작점, 방향, 길이, 휘어짐은 C#(WaxBallShellVisual)이 리셋마다 무작위로 넣는다(_Crack1A/B, _Crack2A/B).
+// - Broken(_BrokenAmount, _Fragment): 큰 판 몇 개로 갈라지고 틈은 흰 점토 색이다.
+//   _Fragment가 커질수록 큰 판 안에 작은 판 경계가 하나씩 생겨 더 잘게 쪼개진다. 손가락 쪽으로 오목하게 눌린다(_DentDir).
+// 균열과 틈 선은 화면에서 1px 아래로 가늘어지지 않게 보정한다.
+// Mixed(흰색이 표면을 덮고 작은 조각만 남음)는 아직 구현하지 않았다.
+// 환경 반사는 쓰지 않는다. AR에서는 배경이 실제 방이므로 광택은 하이라이트만으로 낸다.
 // Quest 성능을 위해 단일 Forward 패스, 텍스처 없이 절차적으로만 계산한다.
 Shader "WaxBall/WaxShell"
 {
     Properties
     {
-        _BaseColor("Base Color", Color) = (0.95, 0.9, 0.75, 1)
-        _CrackColor("Crack Color", Color) = (0.25, 0.15, 0.08, 1)
-        _CrackScale("Crack Scale", Range(1, 10)) = 2
-        _CrackWidth("Crack Width", Range(0.005, 0.1)) = 0.06
+        _ShellColor("Shell Color (왁스 껍질)", Color) = (0.55, 0.8, 0.15, 1)
+        _ClayColor("Clay Color (점토)", Color) = (0.98, 0.98, 0.96, 1)
+
+        [Header(Crack)]
         _CrackAmount("Crack Amount", Range(0, 1)) = 0
+        _CrackLength("Crack Length (한쪽 끝까지 호의 비율)", Range(0.1, 0.8)) = 0.35
+        _GapWidth("Gap Width (가장 넓을 때 반폭, 구 반지름 기준)", Range(0.01, 0.3)) = 0.1
+        _Crack1A("Crack 1 Start(xyz) / Length", Vector) = (-0.25, 0.2, -1, 1)
+        _Crack1B("Crack 1 Angle / Warp / Seed / Width", Vector) = (0.4, 0.3, 1.7, 1)
+        _Crack2A("Crack 2 Start(xyz) / Length", Vector) = (0.45, -0.35, -0.85, 0.6)
+        _Crack2B("Crack 2 Angle / Warp / Seed / Width", Vector) = (2.2, 0.2, 5.3, 0.8)
+
+        [Header(Broken)]
         _BrokenAmount("Broken Amount", Range(0, 1)) = 0
-        _MixAmount("Mix Amount", Range(0, 1)) = 0
-        _HeightAmp("Plate Height", Range(0, 0.1)) = 0.03
-        _TiltAmount("Plate Tilt", Range(0, 1)) = 0.35
-        _SilhouetteAmp("Silhouette Irregularity", Range(0, 0.05)) = 0.015
-        _GrainScaleMul("Grain Scale Multiplier", Range(1, 8)) = 4
+        _Fragment("Fragment (판이 쪼개진 정도)", Range(0, 1)) = 0
+        _PlateScale("Plate Scale (큰 판)", Range(1, 6)) = 1.6
+        _FineScaleMul("Fine Scale Multiplier (작은 판)", Range(1.5, 4)) = 2.2
+        _PlateGapWidth("Plate Gap Width (틈 전체 폭, 구 반지름 기준)", Range(0.02, 0.4)) = 0.2
+        _DentDir("Dent Direction (오브젝트 공간)", Vector) = (0, 0, -1, 0)
+        _DentAmount("Dent Amount", Range(0, 1)) = 0
+        _DoughAmp("Dough Irregularity", Range(0, 0.1)) = 0.04
+
+        [Header(Edge and Clay)]
+        _RimWidth("Rim Width (판 가장자리 밝은 테두리)", Range(0, 0.1)) = 0.03
+        _RimBrightness("Rim Brightness", Range(0, 1)) = 0.45
+        _BulgeStrength("Clay Bulge (점토가 불룩한 정도)", Range(0, 1.5)) = 0.9
+        _MinPixelWidth("Min Pixel Width (선 최소 굵기, px)", Range(0, 3)) = 1
+
+        [Header(Gloss)]
+        _Gloss("Gloss", Range(8, 400)) = 160
+        _SpecStrength("Specular Strength", Range(0, 2)) = 1
+        _WindowHighlight("Window Highlight (시점 기준 창 모양 하이라이트)", Range(0, 2)) = 0.8
+        _FresnelPower("Fresnel Power", Range(1, 8)) = 3
+        _FresnelStrength("Fresnel Strength", Range(0, 0.3)) = 0.08
     }
 
     SubShader
@@ -36,17 +65,32 @@ Shader "WaxBall/WaxShell"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
-                half4 _BaseColor;
-                half4 _CrackColor;
-                float _CrackScale;
-                float _CrackWidth;
+                half4 _ShellColor;
+                half4 _ClayColor;
                 float _CrackAmount;
+                float _CrackLength;
+                float _GapWidth;
+                float4 _Crack1A;
+                float4 _Crack1B;
+                float4 _Crack2A;
+                float4 _Crack2B;
                 float _BrokenAmount;
-                float _MixAmount;
-                float _HeightAmp;
-                float _TiltAmount;
-                float _SilhouetteAmp;
-                float _GrainScaleMul;
+                float _Fragment;
+                float _PlateScale;
+                float _FineScaleMul;
+                float _PlateGapWidth;
+                float4 _DentDir;
+                float _DentAmount;
+                float _DoughAmp;
+                float _RimWidth;
+                float _RimBrightness;
+                float _BulgeStrength;
+                float _MinPixelWidth;
+                float _Gloss;
+                float _SpecStrength;
+                float _WindowHighlight;
+                float _FresnelPower;
+                float _FresnelStrength;
             CBUFFER_END
 
             struct Attributes
@@ -58,16 +102,29 @@ Shader "WaxBall/WaxShell"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float3 normalWS : TEXCOORD0;
+                float3 positionWS : TEXCOORD0;
                 float3 unitPos : TEXCOORD1;
+            };
+
+            // 틈 한 줄(또는 한 경계)이 만드는 결과
+            struct Gap
+            {
+                float cover;     // 흰 점토가 보이는 정도
+                float rim;       // 판 가장자리 밝은 테두리 정도
+                float3 shift;    // 점토가 불룩해 보이도록 법선을 기울이는 방향(오브젝트 공간)
             };
 
             struct VoronoiResult
             {
-                float edge;      // 가장 가까운 두 셀 경계까지의 거리
+                float edge;      // 가장 가까운 두 셀 경계까지의 거리(셀 단위)
                 float lineHash;  // 경계 선의 무작위 값(같은 선은 항상 같은 값)
-                float3 cellId;   // 가장 가까운 셀의 id
+                float3 grad;     // 셀1 → 셀2 방향
             };
+
+            float Hash1(float3 p)
+            {
+                return frac(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+            }
 
             float3 Hash3(float3 p)
             {
@@ -77,12 +134,6 @@ Shader "WaxBall/WaxShell"
                 return frac(sin(p) * 43758.5453);
             }
 
-            float Hash1(float3 p)
-            {
-                return frac(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
-            }
-
-            // 실루엣을 불규칙하게 만드는 저주파 값 노이즈
             float Noise3(float3 p)
             {
                 float3 i = floor(p);
@@ -107,6 +158,7 @@ Shader "WaxBall/WaxShell"
 
                 float d1 = 8.0, d2 = 8.0;
                 float3 id1 = 0, id2 = 0;
+                float3 v1 = 0, v2 = 0;
 
                 for (int z = -1; z <= 1; z++)
                 for (int y = -1; y <= 1; y++)
@@ -116,75 +168,152 @@ Shader "WaxBall/WaxShell"
                     float3 id = cell + offset;
                     float3 diff = offset + Hash3(id) - local;
                     float d = dot(diff, diff);
-                    if (d < d1) { d2 = d1; id2 = id1; d1 = d; id1 = id; }
-                    else if (d < d2) { d2 = d; id2 = id; }
+                    if (d < d1) { d2 = d1; id2 = id1; v2 = v1; d1 = d; id1 = id; v1 = diff; }
+                    else if (d < d2) { d2 = d; id2 = id; v2 = diff; }
                 }
 
                 VoronoiResult result;
                 result.edge = sqrt(d2) - sqrt(d1);
                 // 두 셀 id의 합은 순서와 무관하므로 같은 경계 선은 항상 같은 값을 갖는다.
                 result.lineHash = Hash1(id1 + id2);
-                result.cellId = id1;
+                result.grad = normalize(v2 - v1 + 1e-5);
                 return result;
+            }
+
+            // d: 틈 중심선까지의 거리, px: 화면 1px에 해당하는 거리, w: 틈 반폭,
+            // dirAway: 구 표면에서 틈 중심으로부터 멀어지는 방향(점토가 불룩하게 보이는 법선 기울기용)
+            Gap MakeGap(float d, float px, float w, float inside, float rimW, float3 dirAway)
+            {
+                w = max(w, px * _MinPixelWidth * 0.5);
+
+                Gap gap;
+                gap.cover = (1.0 - smoothstep(w - px * 0.5, w + px * 0.5, d)) * inside;
+                gap.rim = (1.0 - smoothstep(w, w + rimW + px, d)) * inside * (1.0 - gap.cover);
+                gap.shift = dirAway * saturate(d / max(w, 1e-4)) * gap.cover;
+                return gap;
+            }
+
+            // 구 위의 균열 한 줄. 시작점(A.xyz)에서 양쪽으로 자라고, 선은 노이즈로 삐뚤빼뚤하며 폭도 들쭉날쭉하다.
+            // A.w: 길이 배율, B.x: 방향 각도, B.y: 휘어짐, B.z: 시드, B.w: 폭 배율
+            Gap Crack(float3 q, float4 A, float4 B, float amount)
+            {
+                float3 c = normalize(A.xyz);
+                float3 up = abs(c.y) > 0.95 ? float3(1, 0, 0) : float3(0, 1, 0);
+                float3 e1 = normalize(cross(c, up));
+                float3 e2 = cross(c, e1);
+                float3 t = cos(B.x) * e1 + sin(B.x) * e2;
+                float3 n = cross(c, t);
+
+                // 시작점에서 균열을 따라 떨어진 정도(0 = 시작점, 1 = 반대편). 양쪽 길이는 서로 다르다.
+                float angle = atan2(dot(q, t), dot(q, c));
+                float side = angle >= 0.0 ? 1.0 : lerp(0.6, 1.1, frac(B.z * 0.37));
+                float along = abs(angle) / 3.14159265;
+                float halfLength = max(amount * _CrackLength * A.w * side, 0.001);
+                float taper = pow(saturate(1.0 - along / halfLength), 0.6);
+
+                // 큰 휘어짐 + 중간 굴곡. 미분용 값(hBase)에는 잔 떨림을 넣지 않는다.
+                float hBase = dot(q, n)
+                            + (Noise3(q * 1.8 + B.z) - 0.5) * B.y
+                            + (Noise3(q * 4.5 + B.z * 1.3) - 0.5) * B.y * 0.4;
+                float px = fwidth(hBase);
+                // 가장자리를 삐뚤빼뚤하게 만드는 잔 떨림
+                float d = abs(hBase + (Noise3(q * 11.0 + B.z * 2.1) - 0.5) * 0.05);
+
+                float widthVariation = lerp(0.45, 1.7, Noise3(q * 5.0 + B.z * 3.7));
+                float w = _GapWidth * lerp(0.35, 1.0, saturate(amount)) * taper * widthVariation * B.w;
+
+                float inside = step(0.001, amount) * step(0.001, taper);
+                float3 away = (n - dot(n, q) * q) * (hBase >= 0.0 ? 1.0 : -1.0);
+                return MakeGap(d, px, w, inside, _RimWidth * saturate(taper * 3.0), normalize(away + 1e-5));
+            }
+
+            // 판 사이 틈(Voronoi 경계). gate: 이 경계가 얼마나 나타났는지(0~1), 클수록 넓다.
+            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed)
+            {
+                // 셀 단위 거리를 구 반지름 단위 거리로 바꾼다(경계까지 거리 ≈ edge의 절반).
+                float dBase = 0.5 * v.edge / scale;
+                float px = fwidth(dBase);
+                float d = dBase + (Noise3(q * 9.0 + seed) - 0.5) * 0.03;
+
+                float widthVariation = lerp(0.5, 1.5, Noise3(q * 4.0 + seed * 1.7));
+                float w = _PlateGapWidth * 0.5 * widthScale * gate * widthVariation;
+
+                float inside = step(0.001, gate) * step(0.001, _BrokenAmount);
+                float3 away = -(v.grad - dot(v.grad, q) * q);
+                return MakeGap(d, px, w, inside, _RimWidth, normalize(away + 1e-5));
             }
 
             Varyings vert(Attributes input)
             {
-                Varyings output;
-                // 유니티 기본 구는 반지름 0.5이므로 2를 곱해 단위 구로 맞춘다.
-                float3 unitPos = input.positionOS.xyz * 2.0;
                 float3 positionOS = input.positionOS.xyz;
+                float3 normalOS = normalize(input.normalOS);
+                // 유니티 기본 구는 반지름 0.5이므로 2를 곱해 단위 구로 맞춘다.
+                float3 unitPos = positionOS * 2.0;
 
                 if (_BrokenAmount > 0.001)
                 {
-                    // 판마다 높이를 어긋나게 하고 저주파 노이즈로 실루엣을 일그러뜨린다. 섞일수록 가라앉는다.
-                    VoronoiResult v = Voronoi(unitPos * _CrackScale);
-                    float plateHeight = (Hash1(v.cellId + 3.7) - 0.5) * 2.0 * _HeightAmp;
-                    float silhouette = (Noise3(unitPos * 2.0 + 11.3) - 0.5) * 2.0 * _SilhouetteAmp;
-                    positionOS += input.normalOS * (plateHeight + silhouette) * _BrokenAmount * (1.0 - _MixAmount * 0.7);
+                    // 껍질이 버티지 않으니 손가락 쪽이 오목하게 눌리고, 실루엣은 반죽처럼 불규칙해진다.
+                    float dentMask = smoothstep(0.35, 0.95, dot(normalOS, normalize(_DentDir.xyz)));
+                    float dough = (Noise3(unitPos * 1.7 + 4.1) - 0.5) * 2.0 * _DoughAmp * _BrokenAmount;
+                    positionOS += normalOS * (dough * 0.5 - dentMask * _DentAmount * 0.17);
                 }
 
-                output.positionCS = TransformObjectToHClip(positionOS);
-                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                Varyings output;
+                output.positionWS = TransformObjectToWorld(positionOS);
+                output.positionCS = TransformWorldToHClip(output.positionWS);
                 output.unitPos = unitPos;
                 return output;
             }
 
             half4 frag(Varyings input) : SV_Target
             {
-                float3 normal = normalize(input.normalWS);
+                float3 q = normalize(input.unitPos);
+                float3 viewDir = GetWorldSpaceNormalizeViewDir(input.positionWS);
 
-                // 섞일수록 칸이 잘게 쪼개져 알갱이가 된다.
-                float scale = _CrackScale * lerp(1.0, _GrainScaleMul, _MixAmount);
+                // 균열 두 줄. 두 번째는 늦게 나타난다.
+                float amount2 = saturate((_CrackAmount - 0.3) / 0.7) * 0.75;
+                Gap crack1 = Crack(q, _Crack1A, _Crack1B, _CrackAmount);
+                Gap crack2 = Crack(q, _Crack2A, _Crack2B, amount2);
 
-                half crack = 0;
-                half grainTone = 1;
-                if (_CrackAmount > 0.001 || _BrokenAmount > 0.001)
-                {
-                    VoronoiResult v = Voronoi(input.unitPos * scale);
+                // Broken: 큰 판 사이 틈 + 큰 판 안에 하나씩 생기는 작은 판 경계
+                float fineScale = _PlateScale * _FineScaleMul;
+                VoronoiResult plateCells = Voronoi(q * _PlateScale);
+                VoronoiResult fineCells = Voronoi(q * fineScale);
+                float fineGate = saturate((_Fragment - fineCells.lineHash * 0.9) * 5.0) * _BrokenAmount;
+                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1);
+                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9);
 
-                    // 경계 선마다 나타나는 시점이 달라서 amount가 커질수록 선이 하나씩 늘어난다.
-                    float visible = saturate((_CrackAmount - v.lineHash) * 8.0);
-                    float width = _CrackWidth * lerp(0.4, 1.0, _CrackAmount) * sqrt(scale / _CrackScale);
-                    crack = (1.0 - smoothstep(0.0, width, v.edge)) * visible;
+                float cover = max(max(crack1.cover, crack2.cover), max(plate0.cover, plate1.cover));
+                float rim = max(max(crack1.rim, crack2.rim), max(plate0.rim, plate1.rim));
+                float3 shift = crack1.shift + crack2.shift + plate0.shift + plate1.shift;
 
-                    if (_BrokenAmount > 0.001)
-                    {
-                        // 칸마다 법선을 다른 방향으로 기울여 판이 어긋난 것처럼 보이게 한다.
-                        float3 tilt = Hash3(v.cellId + 7.1) - 0.5;
-                        tilt -= dot(tilt, normal) * normal;
-                        normal = normalize(normal + tilt * 2.0 * _TiltAmount * _BrokenAmount * (1.0 + _MixAmount));
-                        // 알갱이마다 밝기가 조금씩 다르다.
-                        grainTone = lerp(1.0, 0.8 + 0.4 * Hash1(v.cellId + 1.3), _MixAmount);
-                    }
-                }
+                // 손가락 쪽 오목한 면은 법선도 중심 쪽으로 살짝 기울인다.
+                float3 dentDir = normalize(_DentDir.xyz);
+                float dentMask = smoothstep(0.35, 0.95, dot(q, dentDir));
+                float3 dentTilt = (dentDir - dot(dentDir, q) * q) * dentMask * (1.0 - dentMask) * 4.0 * _DentAmount * 0.6;
 
+                // 점토가 틈에서 불룩 튀어나온 느낌: 틈 안쪽 법선을 판 쪽으로 기울인다.
+                float3 normalOS = normalize(q + shift * _BulgeStrength + dentTilt);
+                float3 normal = normalize(TransformObjectToWorldNormal(normalOS));
+
+                half3 rimColor = lerp(_ShellColor.rgb, half3(1, 1, 1), _RimBrightness);
+                half3 albedo = lerp(_ShellColor.rgb, rimColor, rim);
+                albedo = lerp(albedo, _ClayColor.rgb, cover);
+
+                // 투명 고무층의 젖은 듯한 광택: 주 광원 하이라이트 + 시점 기준 창 하이라이트 + 약한 프레넬
                 Light mainLight = GetMainLight();
-                half3 lighting = mainLight.color * saturate(dot(normal, mainLight.direction)) * 0.8
-                               + SampleSH(normal);
+                half3 diffuse = mainLight.color * saturate(dot(normal, mainLight.direction)) * 0.8
+                              + SampleSH(normal);
 
-                half3 albedo = lerp(_BaseColor.rgb, _CrackColor.rgb, crack) * grainTone;
-                return half4(albedo * lighting, 1);
+                float3 halfDir = normalize(mainLight.direction + viewDir);
+                half3 specular = mainLight.color * pow(saturate(dot(normal, halfDir)), _Gloss) * _SpecStrength;
+
+                float3 normalVS = TransformWorldToViewDir(normal);
+                half3 window = pow(saturate(dot(normalVS, normalize(float3(-0.4, 0.55, 0.75)))), _Gloss * 0.5) * _WindowHighlight;
+
+                half fresnel = pow(1.0 - saturate(dot(normal, viewDir)), _FresnelPower) * _FresnelStrength;
+
+                return half4(albedo * diffuse + specular + window + fresnel, 1);
             }
             ENDHLSL
         }

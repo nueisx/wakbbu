@@ -26,9 +26,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _CrackAmount: 0
-    - _CrackScale: 2
-    - _CrackWidth: 0.06
     m_Colors:
-    - _BaseColor: {r: 0.95, g: 0.9, b: 0.75, a: 1}
-    - _CrackColor: {r: 0.24999997, g: 0.14999998, b: 0.07999996, a: 1}
+    - _ShellColor: {r: 0.55, g: 0.8, b: 0.15, a: 1}
+    - _ClayColor: {r: 0.98, g: 0.98, b: 0.96, a: 1}
   m_BuildTextureStacks: []
