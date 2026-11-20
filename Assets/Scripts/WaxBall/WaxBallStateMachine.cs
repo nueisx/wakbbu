@@ -33,7 +33,7 @@ namespace WaxBall
         [SerializeField, Range(0f, 1f)] private float pressThreshold = 0.15f;
         [SerializeField, Range(0f, 1f)] private float crackThreshold = 0.55f;
         [SerializeField, Range(0f, 1f)] private float breakThreshold = 0.85f;
-        [SerializeField, Min(0.01f)] private float kneadAmountToMix = 3.0f;
+        [SerializeField, Min(0.01f)] private float kneadAmountToMix = 4.5f;
 
         [Header("Crunched (Broken 상태에서 손가락으로 주무를 때)")]
         [Tooltip("한 손가락의 세기 변화량이 이만큼 쌓일 때마다 그 손가락에 Crunched를 한 번 보낸다.")]

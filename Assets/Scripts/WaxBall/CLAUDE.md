@@ -94,8 +94,8 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 |---|---|
 | `_CrackAmounts` | 균열 두 줄의 진행도(x: 첫 번째, y: 두 번째, 0~1). Cracked에서 grip에 따라 커지고, 한 번 간 값은 되돌아가지 않음(리셋에서만 0). 손가락에 붙지 않은 균열은 0 |
 | `_LocalDamage`, `_Stamps[8]` | 접촉점을 쓰는 씬이면 1. 파손 흔적 8개(방향 xyz, 반경의 코사인). 빈 칸은 코사인 2 |
-| `_BrokenAmount` | 파열 정도(0~1). Broken 진입 시 약 0.1초 만에 1로 올라가 "파삭" 하고 갈라짐 |
-| `_Fragment` | 판이 쪼개진 정도(0~1). 쥐는 힘과 `MixProgress`에 따라 늘고 줄지 않음 |
+| `_BrokenAmount` | 파열 정도(0~1). Broken 진입 시 `brokenRampDuration`(기본 0.3초) 동안 1로 올라가며 큰 판으로 갈라짐. 시각 효과만 늦추고 `StateChanged`와 햅틱 이벤트는 즉시 발생 |
+| `_Fragment` | 판이 쪼개진 정도(0~1). `fragmentBase` + `fragmentGripWeight` × grip + `fragmentKneadWeight` × `MixProgress`를 목표로 `fragmentSpeed`(기본 0.5/초)로 따라가고 줄지 않음. 주무른 양이 대부분을 좌우하므로 여러 번 주물러야 점점 잘게 깨진다 |
 | `_MixAmount` | `MixProgress`(0~1). Broken 동안 주무르면 0에서 올라가 Mixed 진입 시 1이 되므로 Mixed 상태는 mixed-02 모습(작은 초록 조각이 군데군데 남음)이다 |
 | `_DentDir`, `_DentAmount` | 둥글게 들어가는 방향(오브젝트 공간)과 정도. 정도는 Broken 이후 grip을 부드럽게 따라간다 |
 | `_Crack1A/B`, `_Crack2A/B` | 균열 두 줄의 모양 파라미터 |

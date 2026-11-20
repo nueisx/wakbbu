@@ -22,10 +22,16 @@ namespace WaxBall
         [SerializeField, Range(0f, 1f)] private float minCrackAmount = 0.15f;
 
         [Header("파열")]
-        [Tooltip("파열 변형이 나타나는 속도(1/초). 클수록 파삭 하고 즉시 갈라진다.")]
-        [SerializeField, Min(0.1f)] private float brokenRampSpeed = 10f;
-        [Tooltip("판이 더 잘게 쪼개지는 속도(1/초).")]
-        [SerializeField, Min(0.1f)] private float fragmentSpeed = 1.5f;
+        [Tooltip("Broken에 들어갈 때 큰 판으로 갈라지는 데 걸리는 시간(초). 시각 효과만 늦춘다. StateChanged와 햅틱 이벤트는 즉시 발생한다.")]
+        [SerializeField, Min(0.01f)] private float brokenRampDuration = 0.3f;
+        [Tooltip("판이 더 잘게 쪼개지는 속도(1/초). 작을수록 천천히 쪼개진다.")]
+        [SerializeField, Min(0.01f)] private float fragmentSpeed = 0.5f;
+        [Tooltip("Broken에 막 들어갔을 때 이미 쪼개져 있는 정도(0~1).")]
+        [SerializeField, Range(0f, 1f)] private float fragmentBase = 0.2f;
+        [Tooltip("쥐는 힘(grip)이 쪼개짐에 주는 비중. 작을수록 트리거를 조금 움직여서는 쪼개지지 않는다.")]
+        [SerializeField, Range(0f, 1f)] private float fragmentGripWeight = 0.1f;
+        [Tooltip("주무른 양(MixProgress)이 쪼개짐에 주는 비중. 클수록 여러 번 주물러야 점점 잘게 깨진다.")]
+        [SerializeField, Range(0f, 1f)] private float fragmentKneadWeight = 0.7f;
         [Tooltip("grip이 최대일 때 손가락 쪽이 둥글게 들어가는 정도.")]
         [SerializeField, Range(0f, 1f)] private float dentStrength = 0.5f;
         [Tooltip("오목한 정도가 grip을 따라가는 속도.")]
@@ -148,7 +154,7 @@ namespace WaxBall
         private void UpdateBroken()
         {
             bool broken = stateMachine.State >= WaxBallState.Broken;
-            brokenAmount = Mathf.MoveTowards(brokenAmount, broken ? 1f : 0f, brokenRampSpeed * Time.deltaTime);
+            brokenAmount = Mathf.MoveTowards(brokenAmount, broken ? 1f : 0f, Time.deltaTime / brokenRampDuration);
 
             // 껍질이 깨진 뒤에는 grip에 따라 손가락 쪽이 둥글게 들어간다(손에 든 스펀지 공이 눌리는 것과 맞춘다).
             float dentTarget = broken ? stateMachine.Grip * dentStrength : 0f;
@@ -156,9 +162,10 @@ namespace WaxBall
 
             if (!broken) return;
 
-            // 쥐는 힘과 주무른 양이 늘수록 판이 잘게 쪼개진다. 한 번 쪼개진 판은 다시 합쳐지지 않는다.
+            // 주물러서 쌓인 양(MixProgress)이 늘수록 판이 점점 잘게 쪼개지고, 쥐는 힘은 조금만 거든다.
+            // 한 번 쪼개진 판은 다시 합쳐지지 않는다.
             float gripFactor = Mathf.InverseLerp(stateMachine.BreakThreshold, 1f, stateMachine.Grip);
-            float target = Mathf.Clamp01(0.2f + 0.4f * gripFactor + 0.4f * stateMachine.MixProgress);
+            float target = Mathf.Clamp01(fragmentBase + fragmentGripWeight * gripFactor + fragmentKneadWeight * stateMachine.MixProgress);
             fragmentAmount = Mathf.Max(fragmentAmount, Mathf.MoveTowards(fragmentAmount, target, fragmentSpeed * Time.deltaTime));
         }
 

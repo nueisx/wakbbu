@@ -90,7 +90,7 @@
 | `Pressed` | 껍질이 눌리며 저항 | grip ≥ 0.15 | grip < 0.15이면 Idle로 복귀 |
 | `Cracked` | 껍질에 균열 | grip ≥ 0.55 | 유지 (리셋으로만 복귀) |
 | `Broken` | 껍질 파열, 속 점토 노출 | grip ≥ 0.85 | 유지 (리셋으로만 복귀) |
-| `Mixed` | 왁스 조각이 점토와 섞임 | Broken 이후 grip 변화량 누적 ≥ 3.0 | 유지 (리셋으로만 복귀) |
+| `Mixed` | 왁스 조각이 점토와 섞임 | Broken 이후 grip 변화량 누적 ≥ 4.5 (완전히 쥐었다 폈다 1회 ≈ 2.0, 약 2.25회) | 유지 (리셋으로만 복귀) |
 
 - grip이 한 번에 크게 뛰어도 상태 이벤트는 **건너뛰지 않고 한 단계씩** 순서대로 발생한다(예: Idle → Pressed → Cracked → Broken).
 - 임계값은 `WaxBallStateMachine`의 `[SerializeField]` 값이고, Interaction 담당이 정한다(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`).

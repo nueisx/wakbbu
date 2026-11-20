@@ -308,7 +308,7 @@ MonoBehaviour:
   pressThreshold: 0.15
   crackThreshold: 0.55
   breakThreshold: 0.85
-  kneadAmountToMix: 3
+  kneadAmountToMix: 4.5
   crunchGripStep: 0.2
   crunchMinStrength: 0.2
   crunchFullSpeed: 2
@@ -335,8 +335,8 @@ MonoBehaviour:
   maxSquash: 0.25
   brokenSquash: 0.45
   minCrackAmount: 0.15
-  brokenRampSpeed: 10
-  fragmentSpeed: 1.5
+  brokenRampDuration: 0.3
+  fragmentSpeed: 0.5
   dentStrength: 0.5
   dentFollowSpeed: 12
   randomStartForward: {x: 0, y: 0, z: -1}
