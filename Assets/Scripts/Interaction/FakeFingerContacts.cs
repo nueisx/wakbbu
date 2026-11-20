@@ -17,8 +17,8 @@ namespace Interaction
         [SerializeField] private Transform[] fingers = new Transform[WaxBallContacts.MaxContacts];
         [Tooltip("끄면 그 손가락은 접촉하지 않는 것으로 친다.")]
         [SerializeField] private bool[] fingerEnabled = { true, true, true };
-        [Tooltip("손가락별 세기 배율. 기본은 모두 1(Slider 값 그대로).")]
-        [SerializeField] private float[] pressureScale = { 1f, 1f, 1f };
+        [Tooltip("손가락별 세기 배율. 엄지가 가장 세서 첫 균열이 엄지(기본 배치에서 공 앞쪽) 아래에 생긴다.")]
+        [SerializeField] private float[] pressureScale = { 1f, 0.9f, 0.9f };
         [SerializeField] private bool showMarkersInGame;
 
         private void Awake()

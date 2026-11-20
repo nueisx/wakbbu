@@ -26,17 +26,17 @@ namespace WaxBall
         [Tooltip("파손 정도 0일 때의 반경(도). Cracked 직후의 작은 범위.")]
         [SerializeField, Range(5f, 60f)] private float minRadiusDegrees = 20f;
         [Tooltip("파손 정도 1일 때의 반경(도). 한 손가락만으로는 공 전체로 퍼지지 않는다.")]
-        [SerializeField, Range(30f, 120f)] private float maxRadiusDegrees = 85f;
-        [Tooltip("세기 1로 누를 때 초당 늘어나는 파손 정도.")]
-        [SerializeField, Min(0f)] private float pressureDamageRate = 0.25f;
+        [SerializeField, Range(30f, 120f)] private float maxRadiusDegrees = 55f;
+        [Tooltip("세기 1로 누르고만 있을 때 초당 늘어나는 파손 정도. 거의 0으로 두어 첫 깨짐 이후에는 주물러야 범위가 커진다.")]
+        [SerializeField, Min(0f)] private float pressureDamageRate = 0.03f;
         [Tooltip("손가락 세기가 1만큼 변할 때(주무를 때) 늘어나는 파손 정도.")]
         [SerializeField, Min(0f)] private float kneadDamageGain = 0.4f;
 
         [Header("번지기 (아주 약하게)")]
         [Tooltip("같은 자리를 주물러 세기가 1만큼 변할 때 흔적 반경이 더 넓어지는 각도(도). 0이면 꺼진다.")]
         [SerializeField, Min(0f)] private float spreadDegreesPerKnead = 2f;
-        [Tooltip("번지기로 늘어나는 반경의 상한(도). 한 자리만 계속 눌러서는 80%에 닿지 못하게 한다.")]
-        [SerializeField, Min(0f)] private float maxSpreadDegrees = 25f;
+        [Tooltip("번지기로 늘어나는 반경의 상한(도). 반경은 최대 55 + 10 = 65도라 한 흔적이 약 22%이고, 세 손가락이 같은 자리면 40~50%에서 멈춘다.")]
+        [SerializeField, Min(0f)] private float maxSpreadDegrees = 10f;
 
         [Header("접촉점 묶기")]
         [Tooltip("손가락이 흔적에서 이 각도(도) 안에 있으면 같은 흔적을 키우고, 벗어나면 새 흔적을 만든다.")]

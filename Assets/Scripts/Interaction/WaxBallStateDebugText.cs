@@ -19,8 +19,26 @@ namespace Interaction
         private float lastCrunchStrength;
         private float smoothedFrameTime = 1f / 72f;
 
-        private void OnEnable() => stateMachine.Crunched += HandleCrunched;
-        private void OnDisable() => stateMachine.Crunched -= HandleCrunched;
+        private void OnEnable()
+        {
+            stateMachine.Crunched += HandleCrunched;
+            stateMachine.StateChanged += HandleStateChanged;
+        }
+
+        private void OnDisable()
+        {
+            stateMachine.Crunched -= HandleCrunched;
+            stateMachine.StateChanged -= HandleStateChanged;
+        }
+
+        // 리셋(Idle로 돌아감)하면 Crunch 표시도 처음 상태로 돌린다. 손을 살짝 푼 Pressed → Idle은 리셋이 아니다.
+        private void HandleStateChanged(WaxBallState prev, WaxBallState next)
+        {
+            if (next != WaxBallState.Idle || prev < WaxBallState.Cracked) return;
+            crunchCount = 0;
+            lastCrunchFinger = "-";
+            lastCrunchStrength = 0f;
+        }
 
         private void HandleCrunched(WaxFinger finger, float strength)
         {

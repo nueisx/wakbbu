@@ -1015,11 +1015,11 @@ MonoBehaviour:
   contacts: {fileID: 1246623705}
   damagePressureThreshold: 0.3
   minRadiusDegrees: 20
-  maxRadiusDegrees: 85
-  pressureDamageRate: 0.25
+  maxRadiusDegrees: 55
+  pressureDamageRate: 0.03
   kneadDamageGain: 0.4
   spreadDegreesPerKnead: 2
-  maxSpreadDegrees: 25
+  maxSpreadDegrees: 10
   rebindAngleDegrees: 25
   crack1Stamp: -1
   crack2Stamp: -1
@@ -1211,8 +1211,8 @@ MonoBehaviour:
   fingerEnabled: 010101
   pressureScale:
   - 1
-  - 1
-  - 1
+  - 0.9
+  - 0.9
   showMarkersInGame: 0
 --- !u!4 &1376293605
 Transform:
