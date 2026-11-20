@@ -49,6 +49,7 @@ public static class WaxBallDevSceneBuilder
         SetRef(damage, "stateMachine", machine);
         SetRef(damage, "contacts", contacts);
         SetRef(visual, "damage", damage);
+        WaxBallTuningTools.AssignToOpenScene();
         CreateFakeFingers(ball.transform, contacts, machine);
 
         var canvasGo = new GameObject("DevCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));

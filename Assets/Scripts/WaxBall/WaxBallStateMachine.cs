@@ -27,21 +27,22 @@ namespace WaxBall
     /// </summary>
     public class WaxBallStateMachine : MonoBehaviour
     {
+        [Tooltip("튜닝 값(임계값, 범위, 속도 등)을 모아 둔 설정 파일. 비워 두면 코드 기본값(WaxBallTuning의 필드 초기값)을 쓴다. Assets/Settings/WaxBallTuning.asset 하나를 모든 씬이 같이 쓴다.")]
+        [SerializeField] private WaxBallTuning tuning;
+
+        private WaxBallTuning Tuning => tuning != null ? tuning : WaxBallTuning.Default;
+        private float pressThreshold => Tuning.pressThreshold;
+        private float crackThreshold => Tuning.crackThreshold;
+        private float breakThreshold => Tuning.breakThreshold;
+        private float kneadAmountToMix => Tuning.kneadAmountToMix;
+        private float mixAreaThreshold => Tuning.mixAreaThreshold;
+        private float mixAverageThreshold => Tuning.mixAverageThreshold;
+        private float crunchGripStep => Tuning.crunchGripStep;
+        private float crunchMinInterval => Tuning.crunchMinInterval;
+        private float crunchMinStrength => Tuning.crunchMinStrength;
+        private float crunchFullSpeed => Tuning.crunchFullSpeed;
+
         public const int FingerCount = 3;
-
-        [Header("임계값 (Interaction 담당이 튜닝)")]
-        [SerializeField, Range(0f, 1f)] private float pressThreshold = 0.15f;
-        [SerializeField, Range(0f, 1f)] private float crackThreshold = 0.55f;
-        [SerializeField, Range(0f, 1f)] private float breakThreshold = 0.85f;
-        [SerializeField, Min(0.01f)] private float kneadAmountToMix = 3.0f;
-
-        [Header("Crunched (Broken 상태에서 손가락으로 주무를 때)")]
-        [Tooltip("한 손가락의 세기 변화량이 이만큼 쌓일 때마다 그 손가락에 Crunched를 한 번 보낸다.")]
-        [SerializeField, Min(0.01f)] private float crunchGripStep = 0.2f;
-        [Tooltip("가장 천천히 주물렀을 때의 세기.")]
-        [SerializeField, Range(0f, 1f)] private float crunchMinStrength = 0.2f;
-        [Tooltip("이 속도(세기/초) 이상으로 주무르면 세기가 1이 된다.")]
-        [SerializeField, Min(0.01f)] private float crunchFullSpeed = 2f;
 
         [Header("Inspector 이벤트")]
         [SerializeField] private WaxBallStateEvent onStateChanged = new WaxBallStateEvent();
@@ -59,12 +60,34 @@ namespace WaxBall
         private readonly float[] fingerTime = new float[FingerCount];
         private readonly float[] fingerSpeed = new float[FingerCount];
         private readonly float[] fingerCrunchAccumulated = new float[FingerCount];
+        private readonly float[] fingerLastCrunchTime = new float[FingerCount];
         private readonly bool[] fingerSkipDelta = new bool[FingerCount];
 
         public WaxBallState State { get; private set; } = WaxBallState.Idle;
         public float Grip { get; private set; }
         public float KneadAccumulated { get; private set; }
-        public float MixProgress => Mathf.Clamp01(KneadAccumulated / kneadAmountToMix);
+
+        /// <summary>파손된 표면 비율(0~1). WaxBallDamage가 넘긴다. 한 번이라도 넘어오면(접촉점 씬) 섞임 판정이 면적 기준이 된다.</summary>
+        public float DamagedRatio { get; private set; }
+
+        /// <summary>깨진 자리의 평균 섞임(0~1, 깨진 면적 가중). 흔적마다 쌓은 주무른 양에서 WaxBallDamage가 계산한다.</summary>
+        public float AverageMix { get; private set; }
+        public bool AreaMixMode { get; private set; }
+        public float MixAreaThreshold => mixAreaThreshold;
+        public float MixAverageThreshold => mixAverageThreshold;
+        public float KneadAmountToMix => kneadAmountToMix;
+
+        /// <summary>
+        /// 섞임 진행도(0~1). 접촉점 씬은 깨진 자리의 평균 섞임(Broken 전에는 0), 아니면 전체 주무른 양 기준이다.
+        /// </summary>
+        public float MixProgress
+        {
+            get
+            {
+                if (!AreaMixMode) return Mathf.Clamp01(KneadAccumulated / kneadAmountToMix);
+                return State >= WaxBallState.Broken ? AverageMix : 0f;
+            }
+        }
 
         public float PressThreshold => pressThreshold;
         public float CrackThreshold => crackThreshold;
@@ -82,6 +105,15 @@ namespace WaxBall
                 KneadAccumulated += Mathf.Abs(grip - Grip);
 
             Grip = grip;
+            Evaluate();
+        }
+
+        /// <summary>파손된 표면 비율과 깨진 자리의 평균 섞임(0~1)을 알린다. 이 값이 들어오면 Mixed 판정이 전체 주무른 양 대신 이 두 값 기준이 된다.</summary>
+        public void SetDamagedRatio(float ratio, float averageMix)
+        {
+            AreaMixMode = true;
+            DamagedRatio = Mathf.Clamp01(ratio);
+            AverageMix = Mathf.Clamp01(averageMix);
             Evaluate();
         }
 
@@ -112,8 +144,9 @@ namespace WaxBall
             if (State != WaxBallState.Broken) return;
 
             fingerCrunchAccumulated[i] += delta;
-            if (fingerCrunchAccumulated[i] >= crunchGripStep)
+            if (fingerCrunchAccumulated[i] >= crunchGripStep && Time.time - fingerLastCrunchTime[i] >= crunchMinInterval)
             {
+                fingerLastCrunchTime[i] = Time.time;
                 fingerCrunchAccumulated[i] %= crunchGripStep;
                 RaiseCrunched(finger);
             }
@@ -133,11 +166,14 @@ namespace WaxBall
         {
             Grip = 0f;
             KneadAccumulated = 0f;
+            DamagedRatio = 0f;
+            AverageMix = 0f;
             for (int i = 0; i < FingerCount; i++)
             {
                 fingerPressure[i] = 0f;
                 fingerSpeed[i] = 0f;
                 fingerCrunchAccumulated[i] = 0f;
+                fingerLastCrunchTime[i] = float.NegativeInfinity;
                 fingerSkipDelta[i] = false;
             }
             ChangeState(WaxBallState.Idle);
@@ -161,12 +197,18 @@ namespace WaxBall
                         if (Grip >= breakThreshold) { ChangeState(WaxBallState.Broken); continue; }
                         return;
                     case WaxBallState.Broken:
-                        if (KneadAccumulated >= kneadAmountToMix) { ChangeState(WaxBallState.Mixed); }
+                        if (ShouldMix()) { ChangeState(WaxBallState.Mixed); }
                         return;
                     default:
                         return;
                 }
             }
+        }
+
+        private bool ShouldMix()
+        {
+            if (!AreaMixMode) return KneadAccumulated >= kneadAmountToMix;
+            return DamagedRatio >= mixAreaThreshold && AverageMix >= mixAverageThreshold;
         }
 
         private void RaiseCrunched(WaxFinger finger)

@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf2de64dcdba14a9687d4ab9bb336b58, type: 3}
+  m_Name: WaxBallTuning
+  m_EditorClassIdentifier: 
+  pressThreshold: 0.15
+  crackThreshold: 0.55
+  breakThreshold: 0.85
+  kneadAmountToMix: 4.5
+  mixAreaThreshold: 0.8
+  mixAverageThreshold: 0.9
+  crunchGripStep: 0.5
+  crunchMinInterval: 0.1
+  crunchMinStrength: 0.2
+  crunchFullSpeed: 2
+  damagePressureThreshold: 0.3
+  minRadiusDegrees: 20
+  maxRadiusDegrees: 55
+  pressureDamageRate: 0.03
+  kneadDamageGain: 0.4
+  kneadAmountPerStamp: 13.5
+  spreadDegreesPerKnead: 2
+  maxSpreadDegrees: 10
+  rebindAngleDegrees: 25
+  maxSquash: 0.25
+  brokenSquash: 0.45
+  minCrackAmount: 0.15
+  brokenRampDuration: 0.6
+  fragmentSpeed: 0.5
+  fragmentBase: 0.2
+  fragmentGripWeight: 0.1
+  fragmentKneadWeight: 0.7
+  mixFillStart: 0.85
+  dentStrength: 0.5
+  dentFollowSpeed: 12

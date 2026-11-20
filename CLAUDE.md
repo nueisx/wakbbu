@@ -90,10 +90,10 @@
 | `Pressed` | 껍질이 눌리며 저항 | grip ≥ 0.15 | grip < 0.15이면 Idle로 복귀 |
 | `Cracked` | 껍질에 균열 | grip ≥ 0.55 | 유지 (리셋으로만 복귀) |
 | `Broken` | 껍질 파열, 속 점토 노출 | grip ≥ 0.85 | 유지 (리셋으로만 복귀) |
-| `Mixed` | 왁스 조각이 점토와 섞임 | Broken 이후 grip 변화량 누적 ≥ 3.0 | 유지 (리셋으로만 복귀) |
+| `Mixed` | 왁스 조각이 점토와 섞임 | Broken 이후 grip 변화량 누적 ≥ 4.5 (완전히 쥐었다 폈다 1회 ≈ 2.0, 약 2.25회) | 유지 (리셋으로만 복귀) |
 
 - grip이 한 번에 크게 뛰어도 상태 이벤트는 **건너뛰지 않고 한 단계씩** 순서대로 발생한다(예: Idle → Pressed → Cracked → Broken).
-- 임계값은 `WaxBallStateMachine`의 `[SerializeField]` 값이고, Interaction 담당이 정한다(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`).
+- 임계값은 튜닝 설정 파일 `Assets/Settings/WaxBallTuning.asset`에 있고(상태 머신이 참조), Interaction 담당이 정한다(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`).
 
 **리셋 / 재생성**
 - `ResetBall()`은 **어느 상태에서든** 호출할 수 있고, 횟수 제한이 없다. 호출하면 grip, 섞임 누적값, 시각 효과를 초기화하고 `Idle`로 돌아간다.
@@ -111,7 +111,7 @@
 | 이벤트 | 언제 | 값 |
 |---|---|---|
 | `StateChanged(prev, next)` | 상태가 바뀔 때마다 (리셋 포함) | 이전·다음 `WaxBallState` |
-| `Crunched(finger, strength)` | **Broken 상태에서** 손가락으로 주무를 때, 그 손가락의 세기 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 | `WaxFinger`(`Thumb`, `Index`, `Middle`), 세기 0~1 (빠르게 주무를수록 큼) |
+| `Crunched(finger, strength)` | **Broken 상태에서** 손가락으로 주무를 때, 그 손가락의 세기 변화량이 `crunchGripStep`(기본 0.5, 쥐었다 펴면 손가락마다 3~5번)만큼 쌓일 때마다. 손가락별 최소 간격 `crunchMinInterval`(기본 0.1초) | `WaxFinger`(`Thumb`, `Index`, `Middle`), 세기 0~1 (빠르게 주무를수록 큼) |
 
 - C#: `event Action<WaxBallState, WaxBallState> StateChanged`, `event Action<WaxFinger, float> Crunched`
 - Inspector: `UnityEvent<WaxBallState> onStateChanged`, `UnityEvent<WaxFinger, float> onCrunched`

@@ -9,6 +9,8 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 
 | 파일 | 역할 |
 |---|---|
+| `WaxBall/WaxBallTuning.cs` | **튜닝 값 설정 파일**(ScriptableObject). 상태 임계값, 파손 범위·속도, 섞임, 쪼개짐, Crunch 기준, 깨지는 시간을 한곳에 모음. 값은 `Assets/Settings/WaxBallTuning.asset` |
+| `Assets/Editor/WaxBallTuningTools.cs` | 메뉴 `WaxBall > Apply Tuning To Open Scene`: 설정 파일을 만들고 열린 씬의 컴포넌트에 연결 |
 | `WaxBall/WaxBallStateMachine.cs` | 상태 판정의 유일한 장소(공 전체 기준). `SetGrip()`, `SetFingerPressure()`, `ResetBall()`, `StateChanged`, `Crunched(finger, strength)`, `Grip`, `MixProgress` |
 | `WaxBall/WaxFinger.cs` | `enum WaxFinger { Thumb, Index, Middle }` (WEART TouchDIVER G1이 지원하는 세 손가락) |
 | `WaxBall/WaxBallContacts.cs` | 손가락 접촉점 입력 API(세 손가락, 위치 + 세기). 장비 의존 없음. 전체 grip 합치기(최댓값/평균) |
@@ -32,10 +34,10 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 
 ## 2. 상태 머신 구현 세부
 
-- 임계값(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`)은 하드코딩하지 않고 `[SerializeField]`로 노출한다. 값은 Interaction 담당이 정한다.
+- 임계값(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix` 등)은 하드코딩하지 않고 **튜닝 설정 파일**(아래 "튜닝 값 규칙")에 둔다. 값은 Interaction 담당이 정한다.
 - `SetGrip()`은 grip을 0~1로 clamp하고, 한 번에 큰 값이 들어와도 **중간 상태 이벤트를 빠뜨리지 않도록 한 단계씩** 진행한다.
-- Broken 이후에는 grip 변화량을 `KneadAccumulated`에 누적하고, `MixProgress = KneadAccumulated / kneadAmountToMix`(0~1)이다.
-- **Crunched(WaxFinger finger, float strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
+- Broken 이후에는 grip 변화량을 `KneadAccumulated`에 누적하고, 접촉점이 없는 씬의 `MixProgress = KneadAccumulated / kneadAmountToMix`(0~1)이다. 접촉점 씬은 깨진 면적과 흔적별 평균 섞임으로 판정한다(`mixAreaThreshold`, `mixAverageThreshold`, 3장).
+- **Crunched(WaxFinger finger, float strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.5, 한 번 쥐었다 펴면 손가락마다 3~5번)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
   - 세기는 그 손가락의 세기 변화 속도로 정한다. `crunchFullSpeed`(기본 2/초) 이상이면 1, 가장 느리면 `crunchMinStrength`(기본 0.2).
   - C# `event Action<WaxFinger, float> Crunched`, Inspector `UnityEvent<WaxFinger, float> onCrunched`.
   - Broken에 막 진입한 순간의 변화는 세지 않는다. Mixed에서는 발생하지 않는다. `SetGrip`만으로는 발생하지 않는다.
@@ -43,6 +45,16 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 - `ResetBall()`은 grip, 섞임 누적값, Crunched 누적값을 0으로 돌리고 `Idle`로 바꾼다. 어느 상태에서든, 횟수 제한 없이 호출할 수 있다.
 - 런타임에 생성한 오브젝트가 생기면 리셋 시 반드시 정리한다(무한 반복해도 메모리가 누적되지 않게). 현재는 런타임 생성 오브젝트가 없다.
 - 이 폴더의 코드는 `WaxBall` 네임스페이스를 쓴다.
+
+---
+
+### 튜닝 값 규칙 (`WaxBallTuning.asset`)
+
+- 튜닝 값(상태 임계값, 파손 반경·속도, 섞임, 쪼개짐, Crunch 기준, 깨지는 시간, 찌그러짐 등)은 **`Assets/Settings/WaxBallTuning.asset` 한 파일**에만 있다. `WaxBallStateMachine`, `WaxBallDamage`, `WaxBallShellVisual`은 이 파일을 `Tuning` 칸으로 참조하고, dev 씬과 Quest 씬이 같은 파일을 쓴다.
+- **앞으로 값을 바꿀 때는 이 파일만 고친다**(Project 창에서 파일을 눌러 Inspector에서 수정). 컴포넌트나 씬에는 튜닝 값이 저장되지 않으므로 씬마다 값이 어긋나거나, Reload 후 옛날 값으로 Play되는 일이 없다.
+- 새 튜닝 값을 만들 때는 컴포넌트에 `[SerializeField]`로 두지 말고 `WaxBallTuning`에 필드를 추가하고(`Tooltip`, `Range` 포함), 컴포넌트에서는 `Tuning.필드`로 읽는다. 기본값은 필드 초기값이다.
+- `Tuning` 칸이 비어 있으면 코드 기본값(`WaxBallTuning.Default`)을 쓴다. 씬에 연결하려면 씬을 열고 메뉴 `WaxBall > Apply Tuning To Open Scene`을 한 번 실행한 뒤 저장한다(두 씬 빌더도 자동으로 연결한다).
+- 씬마다 다를 수밖에 없는 값(균열 시작 방향 `randomStartForward` 등 공 위치·방향에 묶인 것, 접촉 합치기 방식 `WaxBallContacts`)은 컴포넌트에 남긴다.
 
 ---
 
@@ -77,13 +89,20 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 실제로는 손가락으로 누른 부분의 왁스만 깨진다. 접촉점(`WaxBallContacts`)을 쓰는 씬에서는 다음과 같이 동작한다.
 
 - **파손 흔적(stamp)**: 상태가 Cracked 이상일 때, `damagePressureThreshold`(기본 0.3) 이상으로 누르는 손가락 아래에 흔적이 생긴다. 흔적은 공 로컬 방향 하나와 파손 정도(0~1)를 가진다. 최대 8개다.
-- **범위가 커지는 조건**: 세게 누르면(초당 `pressureDamageRate`) 파손 정도가 늘고, 주무르면(세기 변화량 × `kneadDamageGain`) 더 늘어난다. 반경은 `minRadiusDegrees`(20도)에서 `maxRadiusDegrees`(85도)까지 커지고 줄지 않는다.
+- **범위가 커지는 조건**: 세게 누르면(초당 `pressureDamageRate`) 파손 정도가 늘고, 주무르면(세기 변화량 × `kneadDamageGain`) 더 늘어난다. 반경은 `minRadiusDegrees`(20도)에서 `maxRadiusDegrees`(55도)까지 커지고 줄지 않는다.
 - **손가락을 떼도 흔적은 남는다.** 리셋(Idle)에서만 모두 지운다. 손가락이 흔적에서 `rebindAngleDegrees`(25도) 안이면 같은 흔적을 키우고, 벗어나면 새 흔적을 만든다. 자리가 없으면 가장 가까운 흔적에 합친다.
-- **Mixed에 가까워질수록 공 전체로 퍼진다.** `MixProgress`가 커지면 모든 흔적의 반경이 180도까지 늘고, 0.6~1에서 마스크가 공 전체를 덮는다.
-- **균열 두 줄의 시작점**: 첫 균열은 **가장 세게 누른 손가락 아래**에서, 두 번째 균열은 그 흔적이 아닌 곳에서 **두 번째로 세게 누른 손가락 아래**에서 시작한다. 한 번 붙은 균열은 옮기지 않는다. 세기가 같으면 검지, 중지, 엄지 순으로 먼저 붙는다(Slider 테스트에서는 세 손가락이 같은 세기라 첫 균열은 검지, 두 번째는 중지다). 붙은 손가락이 없는 균열은 보이지 않는다.
+- **번지기(아주 약하게)**: 같은 자리를 주무르면(세기 변화량 1당 `spreadDegreesPerKnead`, 기본 2도) 그 흔적의 반경이 조금 더 넓어진다. 상한은 `maxSpreadDegrees`(기본 10도)이고 0이면 꺼진다. 한 자리만으로는 80%에 닿지 못한다.
+- **처음엔 작게**: `pressureDamageRate` 0.03(거의 0)이라 누르고만 있으면 첫 깨짐 이후 범위가 거의 안 커지고, 주무를 때(`kneadDamageGain` 0.4)만 커진다. 반경은 최대 55 + 번지기 10 = 65도라 한 흔적이 표면의 약 22%이고, 세 손가락이 같은 자리를 쥐면 40~50%에서 멈춘다. 80%에는 손가락을 여러 자리로 옮겨야 닿는다.
+- **깨진 면적과 섞임은 따로다.** `DamagedRatio`는 "판이 갈라진 범위"이고, 흔적마다 쌓은 주무른 양이 "쪼개짐과 흰색 정도"(섞임)다.
+  - **면적**: `WaxBallDamage`가 공 표면의 균일한 표본점 512개(공 로컬) 중 흔적 반경 안에 든 비율을 `DamagedRatio`로 계산한다. 흔적 경계는 셰이더 마스크 0.5 지점이라 숫자와 화면이 맞는다.
+  - **흔적별 주무른 양**: Broken 이후, 흔적에 붙은 손가락의 세기 변화량이 그 흔적의 `knead`에 쌓인다. 흔적 하나에는 프레임마다 가장 많이 움직인 손가락 하나의 변화량만 쌓인다. 흔적의 섞임 = `knead / kneadAmountPerStamp`(0~1, `WaxBallDamage`, 기본 13.5 = 전체 기준 4.5의 3배). 새로 깬 자리는 섞임 0이라 항상 초록 판 + 흰 틈에서 시작한다.
+  - **평균 섞임**(`AverageMix`): 깨진 표본점마다 가장 깊이 든 흔적의 섞임을 모아 면적 가중 평균을 낸다. `MixProgress`는 접촉점 씬에서 이 값이다(Broken 전에는 0). 디버그 텍스트의 `Mix` 줄도 이 값이다.
+  - **Mixed 조건**: `DamagedRatio ≥ mixAreaThreshold`(기본 0.8) 그리고 `AverageMix ≥ mixAverageThreshold`(기본 0.9). 둘 다 `WaxBallStateMachine` Inspector에서 조절한다. 접촉점이 없는 씬은 예전처럼 전체 주무른 양(`kneadAmountToMix`)으로 판정한다.
+  - **셰이더**: 판 줄어듦과 쪼개짐은 픽셀이 속한 흔적의 섞임(`_StampMix[8]`)을 따른다. Mixed 직전(면적 기준 이상, 평균 섞임이 기준의 `mixFillStart`=0.85 이상)에는 `_MixFill`이 남은 부분까지 채운다.
+- **균열 두 줄의 시작점**: 첫 균열은 **가장 세게 누른 손가락 아래**에서, 두 번째 균열은 그 흔적이 아닌 곳에서 **두 번째로 세게 누른 손가락 아래**에서 시작한다. 한 번 붙은 균열은 옮기지 않는다. 세기가 같으면 검지, 중지, 엄지 순으로 먼저 붙는다(가짜 손가락은 `Pressure Scale`이 엄지 1.0, 검지·중지 0.9라서 첫 균열은 엄지 = 기본 배치에서 공 앞쪽, 두 번째는 검지다). 붙은 손가락이 없는 균열은 보이지 않는다.
 - **셰이더 마스크**: 픽셀마다 흔적 8개까지의 거리로 "얼마나 깨졌나"(0~1)를 계산한다. 판 사이 경계는 경계마다 정해진 반경에서 하나씩 나타나서, 파손 범위가 원형 스텐실이 아니라 경계를 따라 번져 나가는 모양이다. Mixed에서 판이 줄어드는 것도 같은 마스크 안에서만 일어난다. 마스크 계산은 흔적 8개에 대한 내적이라 비용이 작다.
 - **접촉점이 없는 씬(Slider만 사용)**: `WaxBallContacts.HasReceivedContact`가 false이면(접촉점 입력이 한 번도 안 들어온 경우) 공 전체가 깨지는 예전 방식으로 동작하고, 균열 시작점은 리셋마다 무작위다. 개발 씬에서 이 방식을 보려면 Play 전에 `FakeFingers` 오브젝트를 끈다. 한 번 접촉점이 들어오면 그 실행 동안은 계속 접촉점 방식이다.
-- 디버그 텍스트의 `Damage: Local, n stamps`와 `Cracks: Index / Middle`로 흔적 수와 균열이 붙은 손가락을 확인한다.
+- 디버그 텍스트의 `Damage: Local, n stamps`, `Damaged: 45%`(파손 면적), 그리고 `Cracks: Index / Middle`로 흔적 수와 균열이 붙은 손가락을 확인한다.
 - 손가락마다 둥글게 들어가는 효과(세 손가락 각자)는 아직 첫 번째 균열의 위치 하나만 따른다(다음 단계).
 
 ### 셰이더 값과 `WaxBallShellVisual`
@@ -94,9 +113,10 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 |---|---|
 | `_CrackAmounts` | 균열 두 줄의 진행도(x: 첫 번째, y: 두 번째, 0~1). Cracked에서 grip에 따라 커지고, 한 번 간 값은 되돌아가지 않음(리셋에서만 0). 손가락에 붙지 않은 균열은 0 |
 | `_LocalDamage`, `_Stamps[8]` | 접촉점을 쓰는 씬이면 1. 파손 흔적 8개(방향 xyz, 반경의 코사인). 빈 칸은 코사인 2 |
-| `_BrokenAmount` | 파열 정도(0~1). Broken 진입 시 약 0.1초 만에 1로 올라가 "파삭" 하고 갈라짐 |
-| `_Fragment` | 판이 쪼개진 정도(0~1). 쥐는 힘과 `MixProgress`에 따라 늘고 줄지 않음 |
-| `_MixAmount` | `MixProgress`(0~1). Broken 동안 주무르면 0에서 올라가 Mixed 진입 시 1이 되므로 Mixed 상태는 mixed-02 모습(작은 초록 조각이 군데군데 남음)이다 |
+| `_BrokenAmount` | 파열 정도(0~1). Broken 진입 시 `brokenRampDuration`(기본 0.6초) 동안 1로 올라가며 큰 판으로 갈라짐. 시각 효과만 늦추고 `StateChanged`와 햅틱 이벤트는 즉시 발생 |
+| `_Fragment` | 판이 쪼개진 정도(0~1). `fragmentBase` + `fragmentGripWeight` × grip + `fragmentKneadWeight` × `MixProgress`를 목표로 `fragmentSpeed`(기본 0.5/초)로 따라가고 줄지 않음. 주무른 양이 대부분을 좌우하므로 여러 번 주물러야 점점 잘게 깨진다 |
+| `_MixAmount` | `MixProgress`(0~1). 접촉점이 없는 씬에서 판 줄어듦을 정한다(전체 주무른 양). Mixed 진입 시 1이 되므로 Mixed 상태는 mixed-02 모습(작은 초록 조각이 군데군데 남음)이다 |
+| `_StampMix[8]`, `_MixFill`, `_FragmentKnead` | 접촉점 씬에서: 흔적마다 섞임(0~1), Mixed 직전 남은 부분 채움 정도, 주무른 양이 쪼개짐에 더하는 비중(`fragmentKneadWeight`) |
 | `_DentDir`, `_DentAmount` | 둥글게 들어가는 방향(오브젝트 공간)과 정도. 정도는 Broken 이후 grip을 부드럽게 따라간다 |
 | `_Crack1A/B`, `_Crack2A/B` | 균열 두 줄의 모양 파라미터 |
 
@@ -177,11 +197,25 @@ Mixed 구현: 작은 판(Voronoi 셀)마다 무작위 값을 둔다. 셀의 `Pie
 
 ---
 
-## 8. Claude Code 작업 시 주의 (이 폴더)
+## 8. 나중 계획 메모 (아직 구현하지 않음)
+
+### (a) 실물 공 위치 정합: 손가락 끝 세 점과 공 반지름으로 공 중심 계산
+- 정합 방식은 **손가락 끝 3점과 공 반지름으로 공 중심을 계산**하는 방식으로 할 예정이다(6장 (A)·(B)·(C) 중 별도 마커 없이 손가락만 쓰는 방식).
+  - 엄지, 검지, 중지 끝 세 점이 모두 공 표면에 닿아 있다고 보고, 세 점에서 실물 공 반지름만큼 떨어진 점을 공 중심으로 잡는다. 세 점을 지나는 반지름 R인 구의 중심은 두 곳(세 점이 이루는 평면의 양쪽)이므로, 손바닥 쪽에 있는 해를 고른다.
+  - 손가락 끝 위치는 Quest 핸드트래킹이나 장갑 tracking에서 얻고, 반지름은 사용할 스펀지 공의 지름에서 얻는다(스펀지 공 사양은 미확정).
+- **공의 회전은 추적하지 않는다.** 공은 항상 방향이 고정(회전 없음)이고 위치만 따라간다. 파손 흔적과 균열 위치는 공 로컬 좌표라서 공이 움직이면 같이 움직이지만, 공이 회전하는 것은 반영하지 않는다.
+
+### (b) 햅틱 제안 (햅틱 담당과 협의)
+- **처음 깨질 때**(`StateChanged`로 Broken 진입): 지금 **닿아 있는 세 손가락 모두** 진동한다.
+- **주무를 때**(`Crunched(finger, strength)`): **깨진 손가락만** 진동한다.
+- 구현에 새 이벤트는 필요 없다. 어댑터가 `Broken` 진입 시 접촉 중인 손가락 전체에, 이후에는 `Crunched`가 알려 주는 손가락에만 진동을 주면 된다.
+
+## 9. Claude Code 작업 시 주의 (이 폴더)
 
 - 화면에 보이는 UI 문자열은 영어로 쓴다.
 - 스크립트 파일이나 클래스 이름을 바꾸지 말 것(.meta GUID와 씬 참조가 끊긴다). 꼭 바꿔야 하면 먼저 확인받는다.
 - `.meta` 파일을 지우거나 새로 만들지 말 것.
 - 셰이더 속성 이름을 바꾸면 `WaxBallShellVisual`과 머티리얼의 저장된 값이 어긋난다. 함께 고친다.
+- 튜닝 값은 `WaxBallTuning.asset`에만 둔다(2장 "튜닝 값 규칙"). 컴포넌트에 새 튜닝 값을 `[SerializeField]`로 만들지 않는다.
 - 환경 반사, 파편 오브젝트, 파티클은 넣지 않는다(3장 이유 참고).
 - 새 셰이더에는 스테레오 인스턴싱 매크로(`UNITY_VERTEX_INPUT_INSTANCE_ID`, `UNITY_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_INSTANCE_ID`, `UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX`)를 반드시 넣는다. Quest는 Multiview를 쓴다.

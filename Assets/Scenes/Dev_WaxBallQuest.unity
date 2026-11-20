@@ -270,14 +270,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 963f4b2162e644bc3a47e461d5c2d4aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  tuning: {fileID: 11400000, guid: 32a7712d345994dfe95f660ad90c90a6, type: 2}
   stateMachine: {fileID: 219718808}
   contacts: {fileID: 219718807}
-  damagePressureThreshold: 0.3
-  minRadiusDegrees: 20
-  maxRadiusDegrees: 85
-  pressureDamageRate: 0.5
-  kneadDamageGain: 1
-  rebindAngleDegrees: 25
 --- !u!114 &219718807
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -305,13 +300,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93b55df814ef74557a0fe29e621deb84, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  pressThreshold: 0.15
-  crackThreshold: 0.55
-  breakThreshold: 0.85
-  kneadAmountToMix: 3
-  crunchGripStep: 0.2
-  crunchMinStrength: 0.2
-  crunchFullSpeed: 2
+  tuning: {fileID: 11400000, guid: 32a7712d345994dfe95f660ad90c90a6, type: 2}
   onStateChanged:
     m_PersistentCalls:
       m_Calls: []
@@ -330,15 +319,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 72efc51f259394ef99bca7c7033d9f8d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  tuning: {fileID: 11400000, guid: 32a7712d345994dfe95f660ad90c90a6, type: 2}
   stateMachine: {fileID: 219718808}
   damage: {fileID: 219718806}
-  maxSquash: 0.25
-  brokenSquash: 0.45
-  minCrackAmount: 0.15
-  brokenRampSpeed: 10
-  fragmentSpeed: 1.5
-  dentStrength: 0.5
-  dentFollowSpeed: 12
   randomStartForward: {x: 0, y: 0, z: -1}
   randomStartConeAngle: 70
   minStartSeparation: 35
@@ -2021,8 +2004,8 @@ MonoBehaviour:
   fingerEnabled: 010101
   pressureScale:
   - 1
-  - 1
-  - 1
+  - 0.9
+  - 0.9
   showMarkersInGame: 0
 --- !u!4 &2073880225
 Transform:
