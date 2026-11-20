@@ -10,8 +10,9 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 | 파일 | 역할 |
 |---|---|
 | `WaxBall/WaxBallStateMachine.cs` | 상태 판정의 유일한 장소(공 전체 기준). `SetGrip()`, `SetFingerPressure()`, `ResetBall()`, `StateChanged`, `Crunched(finger, strength)`, `Grip`, `MixProgress` |
-| `WaxBall/WaxBallContacts.cs` | 손가락 접촉점 입력 API(최대 5개, 위치 + 세기). 장비 의존 없음. 전체 grip 합치기(최댓값/평균) |
-| `../Interaction/FakeFingerContacts.cs` | 에디터 테스트용 가짜 손가락 5개(Scene 뷰에서 드래그, 세기는 Slider grip) |
+| `WaxBall/WaxFinger.cs` | `enum WaxFinger { Thumb, Index, Middle }` (WEART TouchDIVER G1이 지원하는 세 손가락) |
+| `WaxBall/WaxBallContacts.cs` | 손가락 접촉점 입력 API(세 손가락, 위치 + 세기). 장비 의존 없음. 전체 grip 합치기(최댓값/평균) |
+| `../Interaction/FakeFingerContacts.cs` | 에디터 테스트용 가짜 손가락 3개(Scene 뷰에서 드래그, 세기는 Slider grip). 기본 배치는 세 손가락으로 집는 모양(엄지가 검지·중지 반대편) |
 | `WaxBall/WaxBallShellVisual.cs` | 상태와 grip을 읽어 셰이더 값(균열·파열·섞임)과 찌그러짐을 갱신. 균열 모양을 리셋마다 무작위로 뽑음 |
 | `WaxBall/WaxBallTempVisual.cs` | 초기 임시 시각 효과(상태별 색). 지금 빌더는 쓰지 않는다 |
 | `../Interaction/SliderGripInput.cs` | 에디터 테스트용 입력 어댑터(Slider → `SetGrip`, R 키/버튼 → 리셋) |
@@ -30,9 +31,9 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 - 임계값(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`)은 하드코딩하지 않고 `[SerializeField]`로 노출한다. 값은 Interaction 담당이 정한다.
 - `SetGrip()`은 grip을 0~1로 clamp하고, 한 번에 큰 값이 들어와도 **중간 상태 이벤트를 빠뜨리지 않도록 한 단계씩** 진행한다.
 - Broken 이후에는 grip 변화량을 `KneadAccumulated`에 누적하고, `MixProgress = KneadAccumulated / kneadAmountToMix`(0~1)이다.
-- **Crunched(finger, strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
+- **Crunched(WaxFinger finger, float strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
   - 세기는 그 손가락의 세기 변화 속도로 정한다. `crunchFullSpeed`(기본 2/초) 이상이면 1, 가장 느리면 `crunchMinStrength`(기본 0.2).
-  - C# `event Action<int, float> Crunched`, Inspector `UnityEvent<int, float> onCrunched`.
+  - C# `event Action<WaxFinger, float> Crunched`, Inspector `UnityEvent<WaxFinger, float> onCrunched`.
   - Broken에 막 진입한 순간의 변화는 세지 않는다. Mixed에서는 발생하지 않는다. `SetGrip`만으로는 발생하지 않는다.
   - 상태(`StateChanged`)와 `MixProgress`는 여전히 공 전체 grip(`SetGrip`) 기준이다.
 - `ResetBall()`은 grip, 섞임 누적값, Crunched 누적값을 0으로 돌리고 `Idle`로 바꾼다. 어느 상태에서든, 횟수 제한 없이 호출할 수 있다.
@@ -114,6 +115,7 @@ Mixed 구현: 작은 판(Voronoi 셀)마다 무작위 값을 둔다. 셀의 `Pie
 - 테스트 씬은 `Assets/Scenes/dev_waxball.unity`(개인 `Dev_*` 씬, 파일명은 소문자)다. 공용 씬 수정은 한 사람만 한다.
 - 메뉴 **`WaxBall > Create Dev Test Objects`** 가 공, Slider, 리셋 버튼, 디버그 텍스트를 만든다. 실행하기 전에 기존 `WaxBall`, `DevCanvas`, `SliderGripInput`을 지우므로 여러 번 실행해도 중복되지 않는다.
 - 공은 **지름 7cm**(`BallDiameter`)로 만들고, 메인 카메라를 공 앞 **35cm**(`CameraDistance`)에 두며 near clip을 0.01로 낮춘다(실제 Quest 시점과 비슷하게). near clip이 0.3 그대로면 공이 잘려 보인다.
+- **화면에 보이는 UI 문자열(디버그 텍스트, 버튼 등)은 영어로 쓴다.** 예: `Crunch: 65 (Index, 1.00)`. 코드 주석·문서·커밋 메시지는 한국어다.
 - 장비 없이 Slider로 `Idle → … → Mixed → 리셋` 전체 흐름과 Crunched를 확인할 수 있어야 한다. R 키 또는 리셋 버튼으로 리셋한다.
 - Unity에서 `Cmd+Z`로 빌더 결과를 되돌리면 UI 자식 오브젝트가 흩어질 수 있다. 되돌리지 말고 메뉴를 다시 실행한다.
 
@@ -145,6 +147,7 @@ Mixed 구현: 작은 판(Voronoi 셀)마다 무작위 값을 둔다. 셀의 `Pie
 
 ## 8. Claude Code 작업 시 주의 (이 폴더)
 
+- 화면에 보이는 UI 문자열은 영어로 쓴다.
 - 스크립트 파일이나 클래스 이름을 바꾸지 말 것(.meta GUID와 씬 참조가 끊긴다). 꼭 바꿔야 하면 먼저 확인받는다.
 - `.meta` 파일을 지우거나 새로 만들지 말 것.
 - 셰이더 속성 이름을 바꾸면 `WaxBallShellVisual`과 머티리얼의 저장된 값이 어긋난다. 함께 고친다.

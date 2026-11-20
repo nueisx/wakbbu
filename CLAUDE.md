@@ -48,7 +48,7 @@
 | 느낌 | 담당 |
 |---|---|
 | 손에 뭔가 쥐고 있다는 감각, 말랑·물컹한 촉감 | **실물 스펀지 공** (패시브 햅틱, 구현 불필요) |
-| 단단한 왁스 껍질의 저항 | 햅틱 장갑 (force feedback 등) |
+| 단단한 왁스 껍질의 저항 | 햅틱 장갑 (WEART TouchDIVER G1, 손가락 끝 힘) |
 | "파삭" 깨지는 순간 (저항이 갑자기 빠짐 + 짧은 진동) | 햅틱 장갑 |
 | 깨진 뒤 주무를 때 바삭한 알갱이 감각 | 햅틱 장갑 손가락 끝 진동 + 오디오 (`Crunched` 이벤트) |
 | 바삭·와자작 소리 | 오디오 |
@@ -64,6 +64,7 @@
 ## 3. 실물 스펀지 공 (패시브 햅틱)
 
 사용자는 **실제로 스펀지 공(말랑한 공)을 손에 쥔다.** 가상 왁뿌볼은 그 위에 AR로 겹쳐 보인다.
+**공은 세 손가락(엄지, 검지, 중지)으로 쥔다.** 햅틱 장갑이 이 세 손가락만 지원하기 때문이다(8장).
 
 **이렇게 하는 이유**
 - 속 말랑이의 물컹한 촉감을 장갑으로 만들 필요가 없다. 실물이 그대로 준다.
@@ -110,11 +111,11 @@
 | 이벤트 | 언제 | 값 |
 |---|---|---|
 | `StateChanged(prev, next)` | 상태가 바뀔 때마다 (리셋 포함) | 이전·다음 `WaxBallState` |
-| `Crunched(finger, strength)` | **Broken 상태에서** 손가락으로 주무를 때, 그 손가락의 세기 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 | 손가락 번호 0~4, 세기 0~1 (빠르게 주무를수록 큼) |
+| `Crunched(finger, strength)` | **Broken 상태에서** 손가락으로 주무를 때, 그 손가락의 세기 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 | `WaxFinger`(`Thumb`, `Index`, `Middle`), 세기 0~1 (빠르게 주무를수록 큼) |
 
-- C#: `event Action<WaxBallState, WaxBallState> StateChanged`, `event Action<int, float> Crunched`
-- Inspector: `UnityEvent<WaxBallState> onStateChanged`, `UnityEvent<int, float> onCrunched`
-- `finger`는 `SetContact`에 넣은 손가락 번호와 같다. 그 손가락에만 진동을 주면 된다(손가락 번호와 실제 손가락의 대응은 입력 어댑터가 정한다).
+- C#: `event Action<WaxBallState, WaxBallState> StateChanged`, `event Action<WaxFinger, float> Crunched`
+- Inspector: `UnityEvent<WaxBallState> onStateChanged`, `UnityEvent<WaxFinger, float> onCrunched`
+- `WaxFinger`는 `enum WaxFinger { Thumb, Index, Middle }`이다. `finger`는 `SetContact`에 넣은 손가락과 같고, 그 손가락 끝에만 진동을 주면 된다.
 - `Crunched`는 Broken에서만 발생한다. Mixed가 된 뒤에는 발생하지 않는다.
 - 연속적인 값은 이벤트가 아니라 프로퍼티를 매 프레임 읽는다: `Grip`(0~1, 쥐는 정도), `MixProgress`(0~1, 섞임 진행도), `State`(현재 상태).
 
@@ -156,9 +157,10 @@ public class WaxBallHapticsAdapter : MonoBehaviour
         }
     }
 
-    private void OnCrunched(int finger, float strength)
+    private void OnCrunched(WaxFinger finger, float strength)
     {
-        // finger 0~4: 해당 손가락 끝에만 진동을 준다. strength 0~1: 진동 세기와 바삭 소리 크기에 매핑한다.
+        // finger(Thumb/Index/Middle): 해당 손가락 끝에만 진동을 준다.
+        // strength 0~1: 진동 세기와 바삭 소리 크기에 매핑한다.
     }
 
     private void Update()
@@ -169,7 +171,7 @@ public class WaxBallHapticsAdapter : MonoBehaviour
 }
 ```
 - 장갑 tracking이나 핸드트래킹으로 손가락을 읽는다면 입력 어댑터에서 `WaxBallContacts`(공 오브젝트에 있음)에 손가락마다 접촉점을 넣는다:
-  `contacts.SetContact(finger, 손가락 끝 월드 위치, 세기 0~1)`, 떨어지면 `contacts.ClearContact(finger)`.
+  `contacts.SetContact(WaxFinger.Index, 손가락 끝 월드 위치, 세기 0~1)`, 떨어지면 `contacts.ClearContact(WaxFinger.Index)`.
   전체 grip은 접촉점 세기를 합쳐서(기본 최댓값, Inspector에서 평균으로 변경 가능) `SetGrip`으로 들어가며, `Drive Grip`을 켜면 자동이다.
   손가락별 정보 없이 grip 하나만 넣고 싶다면 `stateMachine.SetGrip(grip)`을 직접 부른다.
 - 에디터에서 장비 없이 테스트: Unity 담당의 `Dev_WaxBall` 씬에서 Slider로 grip을 올리며 이벤트를 확인한다(세부는 `Assets/Scripts/WaxBall/CLAUDE.md`).
@@ -178,8 +180,15 @@ public class WaxBallHapticsAdapter : MonoBehaviour
 
 ## 6. 개발 환경 요약과 Git 규칙
 
-- Unity **2022.3.62f3** (다른 버전으로 열지 말 것), URP, Meta XR SDK, Build Target **Android**, 실행 기기 Meta Quest 3(패스스루 AR), 개발 OS macOS.
+- 팀원 모두 Unity **2022.3.62f3** (다른 버전으로 열지 말 것), URP, Meta XR SDK, Build Target **Android**, 실행 기기 Meta Quest 3(패스스루 AR)를 쓴다.
+- 팀원 OS: **Mac**(Unity/AR 담당), **Windows**(햅틱 담당), **Mac + Windows**(Interaction 담당).
+  Windows에서 Quest를 USB로 연결하려면 **ADB 드라이버**가 필요하다.
 - 패키지·빌드·씬 구성 같은 Unity 세부는 `Assets/Scripts/WaxBall/CLAUDE.md`를 본다.
+
+### 개발 흐름
+- **장갑 진동 튜닝**: Windows Unity 에디터 + 동글 + WEART Middleware로, 빌드 없이 Play를 눌러 반복한다.
+- **최종 확인·실험·발표**: Quest 단독 빌드(Quest와 장갑을 블루투스로 직접 연결)로 한다.
+- 장비가 없는 사람은 에디터에서 Slider와 가짜 손가락(`FakeFingerContacts`)만으로 전체 흐름을 테스트한다.
 
 ```
 Assets/
@@ -205,7 +214,8 @@ ProjectSettings/
 - 스크립트 파일이나 클래스 이름을 바꾸지 말 것. 바꾸면 씬·프리팹의 컴포넌트 참조가 끊긴다(.meta GUID 문제). 꼭 바꿔야 하면 먼저 확인받는다.
 - `.meta` 파일을 지우거나 새로 만들지 말 것. Unity가 관리한다.
 - `Packages/manifest.json`의 버전을 임의로 올리지 말 것.
-- 장비 SDK(WEART, SenseGlove)에 직접 의존하는 코드를 `WaxBall/` 폴더에 넣지 말 것. 장비 의존 코드는 어댑터로 분리한다.
+- 장비 SDK(WEART)에 직접 의존하는 코드를 `WaxBall/` 폴더에 넣지 말 것. **WEART SDK 관련 코드는 `Assets/Scripts/Haptics/`의 어댑터 하나에 모은다.**
+- **WEART SDK를 프로젝트에 넣을 때는 팀에 먼저 알린다**(패키지·용량·플랫폼 설정이 모든 팀원의 프로젝트에 영향을 준다).
 
 ---
 
@@ -231,11 +241,11 @@ ProjectSettings/
 (작업 우선순위와 구현 세부는 `Assets/Scripts/WaxBall/CLAUDE.md`)
 
 ### 2번 — 햅틱 담당
-- WEART TouchDIVER Pro / SenseGlove Nova 2 SDK 연동
-- 손가락 입력값 읽기(장갑 tracking 사용 시 grip 값 제공)
-- force / vibration / texture 출력 테스트
+- WEART TouchDIVER G1 SDK 연동(`Assets/Scripts/Haptics/`의 어댑터 하나에 모음)
+- 손가락 입력값 읽기(엄지·검지·중지, 장갑 tracking 사용 시 접촉점과 세기를 `WaxBallContacts`에 제공)
+- 손가락 끝 force / texture / thermal(온도) 출력 테스트
 - 상태별 햅틱 프리셋: 왁스 껍질의 단단한 저항 → 파열 순간 저항 해제와 짧은 진동 → 이후엔 장갑 출력을 끄고 스펀지 공 촉감에 맡김
-- Broken에서 주무를 때: `Crunched(strength)`로 손가락 끝 진동(WEART) 출력
+- Broken에서 주무를 때: `Crunched(finger, strength)`로 **해당 손가락에만** 진동(WEART) 출력
 - 말랑한 촉감은 실물 스펀지 공이 담당하므로 구현하지 않는다
 - 스펀지 공을 쥔 상태에서 장갑 착용·force feedback이 제대로 동작하는지 확인
 - `StateChanged` / `Crunched` 구독으로 Unity 상태와 연결(5장), 실제 파열감 튜닝
@@ -253,16 +263,18 @@ ProjectSettings/
 ## 8. 장비 후보
 
 - **헤드셋:** Meta Quest 3 (대여 기기)
-- **실물 스펀지 공:** 사용자가 실제로 쥐는 공 (사양 미확정)
-- **햅틱 장갑 (미확정):**
-  - SenseGlove Nova 2: force feedback이 있어 "저항하다 갑자기 깨지는 느낌"에 유리할 가능성이 크다.
-  - WEART TouchDIVER Pro: force / texture / thermal
+- **실물 스펀지 공:** 사용자가 실제로 쥐는 공 (사양 미확정). **세 손가락(엄지, 검지, 중지)으로 쥔다.**
+- **햅틱 장갑: WEART TouchDIVER G1**
+  - 손가락 3개: 엄지, 검지, 중지 (코드의 `WaxFinger { Thumb, Index, Middle }`)
+  - 손가락 끝에서 힘, 질감, 온도를 낸다.
+  - Unity SDK는 Android 단독(Quest)과 PC 모두 지원한다.
+  - Quest와 블루투스로 직접 연결할 수 있다.
 
 ---
 
 ## 9. 미확정 사항 (작업 전 확인 필요)
 
-- [ ] 장갑 최종 선택: WEART vs SenseGlove Nova 2
+- [x] 장갑 최종 선택 → **WEART TouchDIVER G1**로 결정 (8장 참고)
 - [ ] 손 추적 방식: Quest 핸드트래킹 vs 장갑 tracking
 - [x] 실물 볼 병행 여부 → **스펀지 공을 실제로 쥐는 방식으로 결정** (3장 참고)
 - [ ] 스펀지 공 사양(지름, 경도, 재질)
@@ -272,6 +284,7 @@ ProjectSettings/
 - [ ] 최종 햅틱 출력 방식
 - [ ] Quest Developer Mode 활성화(대여 기기라 primary 계정이 학교/랩 계정일 수 있음 → MR Center·교수님에게 요청)
 - [ ] Quest ↔ Unity 실제 빌드 테스트
+- [ ] Quest 3 단독 연결 실제 테스트(Quest와 장갑 블루투스 직접 연결, 빌드 단독 실행)
 - [ ] 장갑 ↔ Unity 실제 연동
 - [ ] 최종 사용자 실험 조건
 
