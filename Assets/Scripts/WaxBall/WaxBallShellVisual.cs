@@ -13,31 +13,25 @@ namespace WaxBall
     [RequireComponent(typeof(Renderer))]
     public class WaxBallShellVisual : MonoBehaviour
     {
+        [Tooltip("튜닝 값(임계값, 범위, 속도 등)을 모아 둔 설정 파일. 비워 두면 코드 기본값(WaxBallTuning의 필드 초기값)을 쓴다. Assets/Settings/WaxBallTuning.asset 하나를 모든 씬이 같이 쓴다.")]
+        [SerializeField] private WaxBallTuning tuning;
+
+        private WaxBallTuning Tuning => tuning != null ? tuning : WaxBallTuning.Default;
+        private float maxSquash => Tuning.maxSquash;
+        private float brokenSquash => Tuning.brokenSquash;
+        private float minCrackAmount => Tuning.minCrackAmount;
+        private float brokenRampDuration => Tuning.brokenRampDuration;
+        private float fragmentSpeed => Tuning.fragmentSpeed;
+        private float fragmentBase => Tuning.fragmentBase;
+        private float fragmentGripWeight => Tuning.fragmentGripWeight;
+        private float fragmentKneadWeight => Tuning.fragmentKneadWeight;
+        private float mixFillStart => Tuning.mixFillStart;
+        private float dentStrength => Tuning.dentStrength;
+        private float dentFollowSpeed => Tuning.dentFollowSpeed;
+
         [SerializeField] private WaxBallStateMachine stateMachine;
         [Tooltip("파손 범위 모델. 비워 두면 같은 오브젝트에서 찾고, 없으면 공 전체가 깨진다.")]
         [SerializeField] private WaxBallDamage damage;
-        [SerializeField, Range(0f, 0.5f)] private float maxSquash = 0.25f;
-        [Tooltip("껍질이 깨진 뒤(Broken 이후)의 최대 찌그러짐. 껍질이 안 버티므로 maxSquash보다 크다.")]
-        [SerializeField, Range(0f, 0.7f)] private float brokenSquash = 0.45f;
-        [SerializeField, Range(0f, 1f)] private float minCrackAmount = 0.15f;
-
-        [Header("파열")]
-        [Tooltip("Broken에 들어갈 때 큰 판으로 갈라지는 데 걸리는 시간(초). 시각 효과만 늦춘다. StateChanged와 햅틱 이벤트는 즉시 발생한다.")]
-        [SerializeField, Min(0.01f)] private float brokenRampDuration = 0.6f;
-        [Tooltip("판이 더 잘게 쪼개지는 속도(1/초). 작을수록 천천히 쪼개진다.")]
-        [SerializeField, Min(0.01f)] private float fragmentSpeed = 0.5f;
-        [Tooltip("Broken에 막 들어갔을 때 이미 쪼개져 있는 정도(0~1).")]
-        [SerializeField, Range(0f, 1f)] private float fragmentBase = 0.2f;
-        [Tooltip("쥐는 힘(grip)이 쪼개짐에 주는 비중. 작을수록 트리거를 조금 움직여서는 쪼개지지 않는다.")]
-        [SerializeField, Range(0f, 1f)] private float fragmentGripWeight = 0.1f;
-        [Tooltip("주무른 양(MixProgress, 접촉점 씬은 흔적마다 주무른 양)이 쪼개짐에 주는 비중. 클수록 여러 번 주물러야 점점 잘게 깨진다.")]
-        [SerializeField, Range(0f, 1f)] private float fragmentKneadWeight = 0.7f;
-        [Tooltip("접촉점 씬에서 남은 부분까지 채우기 시작하는 진행도(평균 섞임 / Mixed 기준값). 깨진 면적이 기준 이상일 때만 채운다.")]
-        [SerializeField, Range(0.5f, 1f)] private float mixFillStart = 0.85f;
-        [Tooltip("grip이 최대일 때 손가락 쪽이 둥글게 들어가는 정도.")]
-        [SerializeField, Range(0f, 1f)] private float dentStrength = 0.5f;
-        [Tooltip("오목한 정도가 grip을 따라가는 속도.")]
-        [SerializeField, Min(1f)] private float dentFollowSpeed = 12f;
 
         [Header("균열 시작점 (무작위)")]
         [Tooltip("무작위 시작점을 뽑을 때 중심이 되는 방향(공 로컬 좌표). 개발 씬 카메라 쪽이 -z이다.")]

@@ -27,27 +27,22 @@ namespace WaxBall
     /// </summary>
     public class WaxBallStateMachine : MonoBehaviour
     {
+        [Tooltip("튜닝 값(임계값, 범위, 속도 등)을 모아 둔 설정 파일. 비워 두면 코드 기본값(WaxBallTuning의 필드 초기값)을 쓴다. Assets/Settings/WaxBallTuning.asset 하나를 모든 씬이 같이 쓴다.")]
+        [SerializeField] private WaxBallTuning tuning;
+
+        private WaxBallTuning Tuning => tuning != null ? tuning : WaxBallTuning.Default;
+        private float pressThreshold => Tuning.pressThreshold;
+        private float crackThreshold => Tuning.crackThreshold;
+        private float breakThreshold => Tuning.breakThreshold;
+        private float kneadAmountToMix => Tuning.kneadAmountToMix;
+        private float mixAreaThreshold => Tuning.mixAreaThreshold;
+        private float mixAverageThreshold => Tuning.mixAverageThreshold;
+        private float crunchGripStep => Tuning.crunchGripStep;
+        private float crunchMinInterval => Tuning.crunchMinInterval;
+        private float crunchMinStrength => Tuning.crunchMinStrength;
+        private float crunchFullSpeed => Tuning.crunchFullSpeed;
+
         public const int FingerCount = 3;
-
-        [Header("임계값 (Interaction 담당이 튜닝)")]
-        [SerializeField, Range(0f, 1f)] private float pressThreshold = 0.15f;
-        [SerializeField, Range(0f, 1f)] private float crackThreshold = 0.55f;
-        [SerializeField, Range(0f, 1f)] private float breakThreshold = 0.85f;
-        [SerializeField, Min(0.01f)] private float kneadAmountToMix = 4.5f;
-        [Tooltip("접촉점을 쓰는 씬에서, 공 표면 중 파손된 면적 비율이 이 값 이상이면 Mixed가 된다(0.8 = 80%). 접촉점이 없는 씬은 kneadAmountToMix를 쓴다.")]
-        [SerializeField, Range(0.1f, 1f)] private float mixAreaThreshold = 0.8f;
-        [Tooltip("접촉점을 쓰는 씬에서, 깨진 자리의 평균 섞임(깨진 면적 가중, 흔적마다 주무른 양 기준)이 이 값 이상이어야 Mixed가 된다(0.9 = 90%).")]
-        [SerializeField, Range(0.1f, 1f)] private float mixAverageThreshold = 0.9f;
-
-        [Header("Crunched (Broken 상태에서 손가락으로 주무를 때)")]
-        [Tooltip("한 손가락의 세기 변화량이 이만큼 쌓일 때마다 그 손가락에 Crunched를 한 번 보낸다.")]
-        [SerializeField, Min(0.01f)] private float crunchGripStep = 0.5f;
-        [Tooltip("한 손가락의 Crunched 최소 간격(초). 이보다 빨리 쌓여도 간격이 지날 때까지 기다린다. 장갑 진동이 떨림이 되지 않게 한다.")]
-        [SerializeField, Min(0f)] private float crunchMinInterval = 0.1f;
-        [Tooltip("가장 천천히 주물렀을 때의 세기.")]
-        [SerializeField, Range(0f, 1f)] private float crunchMinStrength = 0.2f;
-        [Tooltip("이 속도(세기/초) 이상으로 주무르면 세기가 1이 된다.")]
-        [SerializeField, Min(0.01f)] private float crunchFullSpeed = 2f;
 
         [Header("Inspector 이벤트")]
         [SerializeField] private WaxBallStateEvent onStateChanged = new WaxBallStateEvent();

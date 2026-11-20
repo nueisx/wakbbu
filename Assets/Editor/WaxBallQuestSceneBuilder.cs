@@ -45,6 +45,7 @@ public static class WaxBallQuestSceneBuilder
             DestroyAllNamed(name);
 
         var ball = CreateBall(out WaxBallStateMachine machine, out WaxBallContacts contacts, out WaxBallDamage damage);
+        WaxBallTuningTools.AssignToOpenScene();
         CreateInput(machine);
         CreateFakeFingersInactive(ball.transform, contacts, machine);
         CreateDebugCanvas(ball.transform, machine, damage);
