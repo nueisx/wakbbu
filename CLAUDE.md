@@ -189,6 +189,7 @@ public class WaxBallHapticsAdapter : MonoBehaviour
 - **장갑 진동 튜닝**: Windows Unity 에디터 + 동글 + WEART Middleware로, 빌드 없이 Play를 눌러 반복한다.
 - **최종 확인·실험·발표**: Quest 단독 빌드(Quest와 장갑을 블루투스로 직접 연결)로 한다.
 - 장비가 없는 사람은 에디터에서 Slider와 가짜 손가락(`FakeFingerContacts`)만으로 전체 흐름을 테스트한다.
+- Quest 실기기에서 왁뿌볼을 보려면 `Dev_WaxBallQuest` 씬을 쓴다(오른손 트리거 = grip, A 버튼 = 리셋). 세부는 `Assets/Scripts/WaxBall/CLAUDE.md`.
 
 ```
 Assets/
