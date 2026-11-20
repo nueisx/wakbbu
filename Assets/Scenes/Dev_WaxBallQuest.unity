@@ -275,8 +275,10 @@ MonoBehaviour:
   damagePressureThreshold: 0.3
   minRadiusDegrees: 20
   maxRadiusDegrees: 85
-  pressureDamageRate: 0.5
-  kneadDamageGain: 1
+  pressureDamageRate: 0.25
+  kneadDamageGain: 0.4
+  spreadDegreesPerKnead: 2
+  maxSpreadDegrees: 25
   rebindAngleDegrees: 25
 --- !u!114 &219718807
 MonoBehaviour:
@@ -309,6 +311,7 @@ MonoBehaviour:
   crackThreshold: 0.55
   breakThreshold: 0.85
   kneadAmountToMix: 4.5
+  mixAreaThreshold: 0.8
   crunchGripStep: 0.2
   crunchMinStrength: 0.2
   crunchFullSpeed: 2
