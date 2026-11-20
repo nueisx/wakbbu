@@ -34,7 +34,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 
 - 임계값(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`)은 하드코딩하지 않고 `[SerializeField]`로 노출한다. 값은 Interaction 담당이 정한다.
 - `SetGrip()`은 grip을 0~1로 clamp하고, 한 번에 큰 값이 들어와도 **중간 상태 이벤트를 빠뜨리지 않도록 한 단계씩** 진행한다.
-- Broken 이후에는 grip 변화량을 `KneadAccumulated`에 누적하고, `MixProgress = KneadAccumulated / kneadAmountToMix`(0~1)이다.
+- Broken 이후에는 grip 변화량을 `KneadAccumulated`에 누적하고, 접촉점이 없는 씬의 `MixProgress = KneadAccumulated / kneadAmountToMix`(0~1)이다. 접촉점 씬은 파손 면적 비율로 판정한다(`mixAreaThreshold`, 3장).
 - **Crunched(WaxFinger finger, float strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
   - 세기는 그 손가락의 세기 변화 속도로 정한다. `crunchFullSpeed`(기본 2/초) 이상이면 1, 가장 느리면 `crunchMinStrength`(기본 0.2).
   - C# `event Action<WaxFinger, float> Crunched`, Inspector `UnityEvent<WaxFinger, float> onCrunched`.
@@ -79,11 +79,13 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 - **파손 흔적(stamp)**: 상태가 Cracked 이상일 때, `damagePressureThreshold`(기본 0.3) 이상으로 누르는 손가락 아래에 흔적이 생긴다. 흔적은 공 로컬 방향 하나와 파손 정도(0~1)를 가진다. 최대 8개다.
 - **범위가 커지는 조건**: 세게 누르면(초당 `pressureDamageRate`) 파손 정도가 늘고, 주무르면(세기 변화량 × `kneadDamageGain`) 더 늘어난다. 반경은 `minRadiusDegrees`(20도)에서 `maxRadiusDegrees`(85도)까지 커지고 줄지 않는다.
 - **손가락을 떼도 흔적은 남는다.** 리셋(Idle)에서만 모두 지운다. 손가락이 흔적에서 `rebindAngleDegrees`(25도) 안이면 같은 흔적을 키우고, 벗어나면 새 흔적을 만든다. 자리가 없으면 가장 가까운 흔적에 합친다.
-- **Mixed에 가까워질수록 공 전체로 퍼진다.** `MixProgress`가 커지면 모든 흔적의 반경이 180도까지 늘고, 0.6~1에서 마스크가 공 전체를 덮는다.
+- **번지기(아주 약하게)**: 같은 자리를 주무르면(세기 변화량 1당 `spreadDegreesPerKnead`, 기본 2도) 그 흔적의 반경이 조금 더 넓어진다. 상한은 `maxSpreadDegrees`(기본 25도)이고 0이면 꺼진다. 한 자리만 계속 눌러서는 80%에 닿지 못한다.
+- **처음엔 작게**: `pressureDamageRate` 0.25, `kneadDamageGain` 0.4라서 꽉 쥐고만 있어도 범위가 천천히 자란다.
+- **면적 기준 Mixed**: `WaxBallDamage`가 공 표면의 균일한 표본점 512개(공 로컬) 중 흔적 반경 안에 든 비율을 `DamagedRatio`로 계산해 `SetDamagedRatio`로 상태 머신에 넘긴다(흔적이 바뀔 때만 계산). 흔적 경계는 셰이더 마스크 0.5 지점이라 숫자와 화면이 맞는다. Broken에서 `DamagedRatio ≥ mixAreaThreshold`(기본 0.8, Inspector)이면 Mixed이고, `MixProgress = DamagedRatio / mixAreaThreshold`(Broken 전에는 0)이다. 접촉점이 없는 씬은 예전처럼 주무른 양(`kneadAmountToMix`)으로 판정한다. 흔적 반경이 `MixProgress`에 따라 공 전체로 부풀지는 않고, `MixProgress`가 `_MixFillStart`(0.85)를 넘으면 셰이더가 남은 부분을 채운다.
 - **균열 두 줄의 시작점**: 첫 균열은 **가장 세게 누른 손가락 아래**에서, 두 번째 균열은 그 흔적이 아닌 곳에서 **두 번째로 세게 누른 손가락 아래**에서 시작한다. 한 번 붙은 균열은 옮기지 않는다. 세기가 같으면 검지, 중지, 엄지 순으로 먼저 붙는다(Slider 테스트에서는 세 손가락이 같은 세기라 첫 균열은 검지, 두 번째는 중지다). 붙은 손가락이 없는 균열은 보이지 않는다.
 - **셰이더 마스크**: 픽셀마다 흔적 8개까지의 거리로 "얼마나 깨졌나"(0~1)를 계산한다. 판 사이 경계는 경계마다 정해진 반경에서 하나씩 나타나서, 파손 범위가 원형 스텐실이 아니라 경계를 따라 번져 나가는 모양이다. Mixed에서 판이 줄어드는 것도 같은 마스크 안에서만 일어난다. 마스크 계산은 흔적 8개에 대한 내적이라 비용이 작다.
 - **접촉점이 없는 씬(Slider만 사용)**: `WaxBallContacts.HasReceivedContact`가 false이면(접촉점 입력이 한 번도 안 들어온 경우) 공 전체가 깨지는 예전 방식으로 동작하고, 균열 시작점은 리셋마다 무작위다. 개발 씬에서 이 방식을 보려면 Play 전에 `FakeFingers` 오브젝트를 끈다. 한 번 접촉점이 들어오면 그 실행 동안은 계속 접촉점 방식이다.
-- 디버그 텍스트의 `Damage: Local, n stamps`와 `Cracks: Index / Middle`로 흔적 수와 균열이 붙은 손가락을 확인한다.
+- 디버그 텍스트의 `Damage: Local, n stamps`, `Damaged: 45%`(파손 면적), 그리고 `Cracks: Index / Middle`로 흔적 수와 균열이 붙은 손가락을 확인한다.
 - 손가락마다 둥글게 들어가는 효과(세 손가락 각자)는 아직 첫 번째 균열의 위치 하나만 따른다(다음 단계).
 
 ### 셰이더 값과 `WaxBallShellVisual`
@@ -96,7 +98,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 | `_LocalDamage`, `_Stamps[8]` | 접촉점을 쓰는 씬이면 1. 파손 흔적 8개(방향 xyz, 반경의 코사인). 빈 칸은 코사인 2 |
 | `_BrokenAmount` | 파열 정도(0~1). Broken 진입 시 `brokenRampDuration`(기본 0.6초) 동안 1로 올라가며 큰 판으로 갈라짐. 시각 효과만 늦추고 `StateChanged`와 햅틱 이벤트는 즉시 발생 |
 | `_Fragment` | 판이 쪼개진 정도(0~1). `fragmentBase` + `fragmentGripWeight` × grip + `fragmentKneadWeight` × `MixProgress`를 목표로 `fragmentSpeed`(기본 0.5/초)로 따라가고 줄지 않음. 주무른 양이 대부분을 좌우하므로 여러 번 주물러야 점점 잘게 깨진다 |
-| `_MixAmount` | `MixProgress`(0~1). Broken 동안 주무르면 0에서 올라가 Mixed 진입 시 1이 되므로 Mixed 상태는 mixed-02 모습(작은 초록 조각이 군데군데 남음)이다 |
+| `_MixAmount` | `MixProgress`(0~1). 접촉점 씬은 파손 면적 기준, 아니면 주무른 양 기준으로 Broken 동안 0에서 올라가 Mixed 진입 시 1이 되므로 Mixed 상태는 mixed-02 모습(작은 초록 조각이 군데군데 남음)이다 |
 | `_DentDir`, `_DentAmount` | 둥글게 들어가는 방향(오브젝트 공간)과 정도. 정도는 Broken 이후 grip을 부드럽게 따라간다 |
 | `_Crack1A/B`, `_Crack2A/B` | 균열 두 줄의 모양 파라미터 |
 

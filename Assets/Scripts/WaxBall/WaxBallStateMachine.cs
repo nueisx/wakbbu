@@ -34,6 +34,8 @@ namespace WaxBall
         [SerializeField, Range(0f, 1f)] private float crackThreshold = 0.55f;
         [SerializeField, Range(0f, 1f)] private float breakThreshold = 0.85f;
         [SerializeField, Min(0.01f)] private float kneadAmountToMix = 4.5f;
+        [Tooltip("접촉점을 쓰는 씬에서, 공 표면 중 파손된 면적 비율이 이 값 이상이면 Mixed가 된다(0.8 = 80%). 접촉점이 없는 씬은 kneadAmountToMix를 쓴다.")]
+        [SerializeField, Range(0.1f, 1f)] private float mixAreaThreshold = 0.8f;
 
         [Header("Crunched (Broken 상태에서 손가락으로 주무를 때)")]
         [Tooltip("한 손가락의 세기 변화량이 이만큼 쌓일 때마다 그 손가락에 Crunched를 한 번 보낸다.")]
@@ -64,7 +66,21 @@ namespace WaxBall
         public WaxBallState State { get; private set; } = WaxBallState.Idle;
         public float Grip { get; private set; }
         public float KneadAccumulated { get; private set; }
-        public float MixProgress => Mathf.Clamp01(KneadAccumulated / kneadAmountToMix);
+
+        /// <summary>파손된 표면 비율(0~1). WaxBallDamage가 넘긴다. 한 번이라도 넘어오면(접촉점 씬) 섞임 판정이 면적 기준이 된다.</summary>
+        public float DamagedRatio { get; private set; }
+        public bool AreaMixMode { get; private set; }
+        public float MixAreaThreshold => mixAreaThreshold;
+
+        /// <summary>섞임 진행도(0~1). 접촉점 씬은 파손 면적 / 기준값(Broken 전에는 0), 아니면 주무른 양 기준.</summary>
+        public float MixProgress
+        {
+            get
+            {
+                if (!AreaMixMode) return Mathf.Clamp01(KneadAccumulated / kneadAmountToMix);
+                return State >= WaxBallState.Broken ? Mathf.Clamp01(DamagedRatio / mixAreaThreshold) : 0f;
+            }
+        }
 
         public float PressThreshold => pressThreshold;
         public float CrackThreshold => crackThreshold;
@@ -82,6 +98,14 @@ namespace WaxBall
                 KneadAccumulated += Mathf.Abs(grip - Grip);
 
             Grip = grip;
+            Evaluate();
+        }
+
+        /// <summary>파손된 표면 비율(0~1)을 알린다. 이 값이 들어오면 Mixed 판정이 주무른 양 대신 면적 기준이 된다.</summary>
+        public void SetDamagedRatio(float ratio)
+        {
+            AreaMixMode = true;
+            DamagedRatio = Mathf.Clamp01(ratio);
             Evaluate();
         }
 
@@ -133,6 +157,7 @@ namespace WaxBall
         {
             Grip = 0f;
             KneadAccumulated = 0f;
+            DamagedRatio = 0f;
             for (int i = 0; i < FingerCount; i++)
             {
                 fingerPressure[i] = 0f;
@@ -161,7 +186,7 @@ namespace WaxBall
                         if (Grip >= breakThreshold) { ChangeState(WaxBallState.Broken); continue; }
                         return;
                     case WaxBallState.Broken:
-                        if (KneadAccumulated >= kneadAmountToMix) { ChangeState(WaxBallState.Mixed); }
+                        if (MixProgress >= 1f) { ChangeState(WaxBallState.Mixed); }
                         return;
                     default:
                         return;

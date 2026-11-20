@@ -45,6 +45,7 @@ Shader "WaxBall/WaxShell"
 
         [Header(Mixed)]
         _MixAmount("Mix Amount (MixProgress)", Range(0, 1)) = 0
+        _MixFillStart("Mix Fill Start (이 MixProgress부터 남은 부분도 점토로 채움)", Range(0.5, 1)) = 0.85
         _PieceFraction("Piece Fraction (Mixed에서 남는 작은 판의 비율)", Range(0.05, 0.9)) = 0.45
         _PieceInset("Piece Inset (남는 조각이 가장자리에서 줄어든 폭, 클수록 작은 조각)", Range(0.005, 0.08)) = 0.03
 
@@ -95,6 +96,7 @@ Shader "WaxBall/WaxShell"
                 float _LocalDamage;
                 float4 _Stamps[8];
                 float _MixAmount;
+                float _MixFillStart;
                 float _PieceFraction;
                 float _PieceInset;
                 float _RimWidth;
@@ -284,7 +286,7 @@ Shader "WaxBall/WaxShell"
             }
 
             // 파손 흔적 주변이 얼마나 깨졌는지(0~1). 흔적은 (방향 xyz, 반경의 코사인)이고 빈 칸은 코사인이 2다.
-            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 공 전체가 깨진다. MixProgress가 커지면 공 전체로 퍼진다.
+            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 공 전체가 깨진다. MixProgress가 _MixFillStart를 넘으면 남은 부분도 채운다.
             float DamageMask(float3 q)
             {
                 if (_LocalDamage < 0.5) return 1.0;
@@ -297,7 +299,7 @@ Shader "WaxBall/WaxShell"
                     float t = saturate((dot(q, stamp.xyz) - stamp.w) / max(inner - stamp.w, 1e-4));
                     mask = max(mask, t * t * (3.0 - 2.0 * t));
                 }
-                return max(mask, smoothstep(0.6, 1.0, _MixAmount));
+                return max(mask, smoothstep(_MixFillStart, 1.0, _MixAmount));
             }
 
             Varyings vert(Attributes input)

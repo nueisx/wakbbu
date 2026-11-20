@@ -196,7 +196,7 @@ namespace WaxBall
                     a2 = new Vector4(anchor2.x, anchor2.y, anchor2.z, crack2A.w);
                 else amount2 = 0f;
 
-                damage.FillShaderStamps(stamps, stateMachine.MixProgress);
+                damage.FillShaderStamps(stamps);
                 block.SetVectorArray(StampsId, stamps);
             }
 
