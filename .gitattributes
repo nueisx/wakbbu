@@ -1,0 +1,62 @@
+# Unity 프로젝트용 .gitattributes
+# 팀원이 Mac(Unity/AR), Windows(햅틱), Mac + Windows(Interaction)를 섞어 쓰므로 줄바꿈을 통일한다.
+
+# 텍스트 파일은 저장소에 LF로 저장하고, 작업 폴더의 줄바꿈은 각자 OS 설정을 따른다.
+# (이미 CRLF로 저장된 외부 에셋 파일은 자동으로 건드리지 않는다.)
+* text=auto
+
+# Unity YAML 에셋은 항상 LF로 둔다. Mac과 Windows에서 같은 파일이 줄바꿈 때문에 바뀌는 일을 막는다.
+# merge=unityyamlmerge: Unity 전용 병합 도구(UnityYAMLMerge)를 쓰도록 지정한다.
+# 도구를 각자 설정하지 않으면 git은 기본 텍스트 병합을 쓴다. 씬(.unity) 충돌이 잦으므로 설정을 권장한다.
+*.unity merge=unityyamlmerge eol=lf
+*.prefab merge=unityyamlmerge eol=lf
+*.asset merge=unityyamlmerge eol=lf
+*.mat merge=unityyamlmerge eol=lf
+*.anim merge=unityyamlmerge eol=lf
+*.controller merge=unityyamlmerge eol=lf
+*.physicMaterial merge=unityyamlmerge eol=lf
+*.meta eol=lf
+
+# 셰이더와 문서도 LF로 둔다.
+*.shader eol=lf
+*.cginc eol=lf
+*.hlsl eol=lf
+*.md eol=lf
+
+# 바이너리: 줄바꿈 변환과 텍스트 병합을 하지 않는다.
+# 이미지
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.tga binary
+*.tif binary
+*.tiff binary
+*.psd binary
+*.exr binary
+*.hdr binary
+# 오디오
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.aif binary
+*.aiff binary
+# 영상
+*.mp4 binary
+*.mov binary
+# 3D 모델
+*.fbx binary
+*.blend binary
+# 폰트
+*.ttf binary
+*.TTF binary
+*.otf binary
+# 플러그인, 빌드 결과, 기타
+*.dll binary
+*.so binary
+*.aar binary
+*.apk binary
+*.aab binary
+*.unitypackage binary
+*.pdf binary
+*.zip binary
