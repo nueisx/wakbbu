@@ -8,6 +8,9 @@ using WaxBall;
 
 public static class WaxBallDevSceneBuilder
 {
+    private const float BallDiameter = 0.07f;
+    private const float CameraDistance = 0.35f;
+
     [MenuItem("WaxBall/Create Dev Test Objects")]
     private static void Create()
     {
@@ -25,8 +28,10 @@ public static class WaxBallDevSceneBuilder
         var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         ball.name = "WaxBall";
         ball.transform.position = new Vector3(0f, 0f, 3f);
+        ball.transform.localScale = Vector3.one * BallDiameter;
         var machine = ball.AddComponent<WaxBallStateMachine>();
-        var visual = ball.AddComponent<WaxBallTempVisual>();
+        ball.GetComponent<Renderer>().sharedMaterial = LoadOrCreateShellMaterial();
+        var visual = ball.AddComponent<WaxBallShellVisual>();
         SetRef(visual, "stateMachine", machine);
 
         var canvasGo = new GameObject("DevCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -70,13 +75,48 @@ public static class WaxBallDevSceneBuilder
         labelRect.anchorMax = new Vector2(0f, 1f);
         labelRect.pivot = new Vector2(0f, 1f);
         labelRect.anchoredPosition = new Vector2(20f, -20f);
-        labelRect.sizeDelta = new Vector2(400f, 150f);
+        labelRect.sizeDelta = new Vector2(400f, 190f);
         var debugText = labelGo.AddComponent<WaxBallStateDebugText>();
         SetRef(debugText, "stateMachine", machine);
         SetRef(debugText, "label", label);
 
+        PlaceCamera(ball.transform.position);
+
         Undo.RegisterCreatedObjectUndo(ball, "Create WaxBall Dev Objects");
         Selection.activeGameObject = ball;
+    }
+
+    // 실제 Quest 시점처럼 공 바로 앞(30~40cm)에서 바라보게 카메라를 맞춘다.
+    private static void PlaceCamera(Vector3 ballPosition)
+    {
+        var cam = Camera.main;
+        if (cam == null) return;
+
+        Undo.RecordObject(cam.transform, "Place Dev Camera");
+        Undo.RecordObject(cam, "Place Dev Camera");
+        cam.transform.SetPositionAndRotation(ballPosition + Vector3.back * CameraDistance, Quaternion.identity);
+        cam.nearClipPlane = 0.01f;
+    }
+
+    private static Material LoadOrCreateShellMaterial()
+    {
+        const string dir = "Assets/Materials";
+        const string path = dir + "/WaxShell.mat";
+
+        var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (material != null) return material;
+
+        var shader = Shader.Find("WaxBall/WaxShell");
+        if (shader == null)
+        {
+            Debug.LogError("WaxBall/WaxShell 셰이더를 찾지 못했다. 셰이더 컴파일 에러가 없는지 확인한다.");
+            return null;
+        }
+
+        if (!AssetDatabase.IsValidFolder(dir)) AssetDatabase.CreateFolder("Assets", "Materials");
+        material = new Material(shader);
+        AssetDatabase.CreateAsset(material, path);
+        return material;
     }
 
     private static void SetRef(Object target, string field, Object value)
