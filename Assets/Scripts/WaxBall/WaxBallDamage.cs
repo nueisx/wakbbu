@@ -8,7 +8,10 @@ namespace WaxBall
     /// - 세게 누르거나 주무를수록 흔적의 범위(반경)가 커진다. 반경은 줄지 않는다.
     /// - 손가락을 떼도 흔적은 남는다(실물은 복원되지 않는다). 리셋(Idle)에서만 모두 지운다.
     /// - 같은 자리를 주무르면 흔적이 아주 조금씩 넓어진다(spreadDegreesPerKnead, 0이면 꺼짐).
-/// - 공 표면 중 흔적에 덮인 면적 비율(DamagedRatio)을 상태 머신에 넘기고, 이 비율이 기준을 넘으면 Mixed가 된다.
+/// - 흔적마다 주무른 양(knead)을 따로 쌓는다. 그 흔적에 붙은 손가락의 세기 변화량이 Broken 이후에만 쌓이고,
+///   kneadAmountToMix만큼 쌓이면 그 흔적은 완전히 섞인 것(섞임 1)이다. 새로 깬 자리는 항상 섞임 0에서 시작한다.
+/// - 공 표면 중 흔적에 덮인 면적 비율(DamagedRatio)과 깨진 자리의 평균 섞임(AverageMix, 면적 가중)을
+///   상태 머신에 넘기고, 두 값이 각각 기준을 넘으면 Mixed가 된다.
     /// - 첫 균열은 가장 세게 누른 손가락의 흔적에, 두 번째 균열은 두 번째로 세게 누른 손가락의 흔적에 붙는다.
     /// 접촉점 입력(WaxBallContacts)이 한 번도 들어오지 않은 씬(Slider만 쓰는 경우)은 LocalMode가 false이고,
     /// 이때 시각 효과는 공 전체가 깨지는 예전 방식으로 동작한다.
@@ -48,6 +51,7 @@ namespace WaxBall
             public Vector3 direction;   // 공 로컬 방향(길이 1)
             public float damage;        // 0~1
             public float spread;        // 번지기로 더해진 반경(도)
+            public float knead;         // Broken 이후 이 흔적에 쌓인 주무른 양(세기 변화량 합)
         }
 
         // 균열 우선순위: 세기가 같으면 검지, 중지, 엄지 순으로 먼저 붙는다.
@@ -66,6 +70,13 @@ namespace WaxBall
 
         /// <summary>공 표면 중 파손된 면적 비율(0~1).</summary>
         public float DamagedRatio { get; private set; }
+
+        /// <summary>깨진 자리의 평균 섞임(0~1, 깨진 면적 가중). 깨진 자리가 없으면 0.</summary>
+        public float AverageMix { get; private set; }
+
+        private readonly Vector3[] areaDirs = new Vector3[MaxStamps];
+        private readonly float[] areaLimits = new float[MaxStamps];
+        private readonly float[] areaMix = new float[MaxStamps];
 
         /// <summary>접촉점 입력이 연결된 씬인가. false면 공 전체가 깨지는 방식을 쓴다.</summary>
         public bool LocalMode => contacts != null && contacts.HasReceivedContact;
@@ -141,6 +152,13 @@ namespace WaxBall
                 float beforeSpread = stamps[s].spread;
                 stamps[s].spread = Mathf.Min(maxSpreadDegrees, beforeSpread + change * spreadDegreesPerKnead);
                 if (stamps[s].damage != before || stamps[s].spread != beforeSpread) ratioDirty = true;
+
+                // 깨진 뒤(Broken 이후)에만 주무른 양이 쌓인다. 쌓이는 곳은 이 손가락이 붙은 흔적뿐이다.
+                if (stateMachine.State >= WaxBallState.Broken && change > 0f)
+                {
+                    stamps[s].knead += change;
+                    ratioDirty = true;
+                }
                 lastPressure[i] = pressure;
             }
 
@@ -149,9 +167,9 @@ namespace WaxBall
             if (ratioDirty)
             {
                 ratioDirty = false;
-                DamagedRatio = ComputeDamagedRatio();
+                ComputeArea();
             }
-            if (LocalMode) stateMachine.SetDamagedRatio(DamagedRatio);
+            if (LocalMode) stateMachine.SetDamagedRatio(DamagedRatio, AverageMix);
         }
 
         private float RadiusRadians(in Stamp stamp)
@@ -161,31 +179,45 @@ namespace WaxBall
             return Mathf.Min(degrees, 175f) * Mathf.Deg2Rad;
         }
 
-        // 셰이더에서 "깨졌다"고 보이기 시작하는 경계(마스크 0.5, 안쪽 45% 구간 중간)까지를 면적으로 센다.
-        private float ComputeDamagedRatio()
+        // 흔적마다 섞임: 주무른 양 / kneadAmountToMix (0~1)
+        private float StampMix(in Stamp stamp)
         {
-            Vector3[] dirs = new Vector3[MaxStamps];
-            float[] limits = new float[MaxStamps];
+            return Mathf.Clamp01(stamp.knead / stateMachine.KneadAmountToMix);
+        }
+
+        // 셰이더에서 "깨졌다"고 보이기 시작하는 경계(마스크 0.5, 안쪽 45% 구간 중간)까지를 면적으로 센다.
+        // 표본점이 여러 흔적에 겹치면 가장 깊이 들어 있는 흔적의 섞임을 쓴다.
+        private void ComputeArea()
+        {
             int n = 0;
             for (int i = 0; i < MaxStamps; i++)
             {
                 if (!stamps[i].used) continue;
                 float cosR = Mathf.Cos(RadiusRadians(stamps[i]));
-                dirs[n] = stamps[i].direction;
-                limits[n] = cosR + 0.5f * 0.45f * (1f - cosR);
+                areaDirs[n] = stamps[i].direction;
+                areaLimits[n] = cosR + 0.5f * 0.45f * (1f - cosR);
+                areaMix[n] = StampMix(stamps[i]);
                 n++;
             }
-            if (n == 0) return 0f;
 
             int covered = 0;
+            float mixSum = 0f;
             foreach (Vector3 p in samples)
             {
+                int owner = -1;
+                float bestDepth = 0f;
                 for (int i = 0; i < n; i++)
                 {
-                    if (Vector3.Dot(p, dirs[i]) >= limits[i]) { covered++; break; }
+                    float depth = Vector3.Dot(p, areaDirs[i]) - areaLimits[i];
+                    if (depth >= 0f && (owner < 0 || depth > bestDepth)) { owner = i; bestDepth = depth; }
                 }
+                if (owner < 0) continue;
+                covered++;
+                mixSum += areaMix[owner];
             }
-            return covered / (float)SampleCount;
+
+            DamagedRatio = covered / (float)SampleCount;
+            AverageMix = covered > 0 ? mixSum / covered : 0f;
         }
 
         private static Vector3[] BuildSamples()
@@ -214,17 +246,19 @@ namespace WaxBall
 
         /// <summary>
         /// 셰이더에 넘길 흔적 배열을 채운다. 각 원소는 (방향 xyz, 반경의 코사인)이고, 빈 칸은 코사인이 2다.
-        /// 반경은 파손 정도와 번지기만 반영한다. 마지막에 공 전체를 채우는 것은 셰이더가 MixProgress로 한다.
+        /// mixDestination에는 흔적마다 섞임(0~1)을 채운다. 반경은 파손 정도와 번지기만 반영한다. 마지막에 공 전체를 채우는 것은 셰이더가 MixProgress로 한다.
         /// </summary>
-        public void FillShaderStamps(Vector4[] destination)
+        public void FillShaderStamps(Vector4[] destination, float[] mixDestination)
         {
             for (int i = 0; i < MaxStamps && i < destination.Length; i++)
             {
                 if (!stamps[i].used)
                 {
                     destination[i] = new Vector4(0f, 0f, 1f, 2f);
+                    if (i < mixDestination.Length) mixDestination[i] = 0f;
                     continue;
                 }
+                if (i < mixDestination.Length) mixDestination[i] = StampMix(stamps[i]);
 
                 float radius = RadiusRadians(stamps[i]);
                 Vector3 d = stamps[i].direction;
@@ -341,6 +375,7 @@ namespace WaxBall
             Crack1Finger = null;
             Crack2Finger = null;
             DamagedRatio = 0f;
+            AverageMix = 0f;
             ratioDirty = false;
         }
     }

@@ -36,6 +36,8 @@ namespace WaxBall
         [SerializeField, Min(0.01f)] private float kneadAmountToMix = 4.5f;
         [Tooltip("접촉점을 쓰는 씬에서, 공 표면 중 파손된 면적 비율이 이 값 이상이면 Mixed가 된다(0.8 = 80%). 접촉점이 없는 씬은 kneadAmountToMix를 쓴다.")]
         [SerializeField, Range(0.1f, 1f)] private float mixAreaThreshold = 0.8f;
+        [Tooltip("접촉점을 쓰는 씬에서, 깨진 자리의 평균 섞임(깨진 면적 가중, 흔적마다 주무른 양 기준)이 이 값 이상이어야 Mixed가 된다(0.9 = 90%).")]
+        [SerializeField, Range(0.1f, 1f)] private float mixAverageThreshold = 0.9f;
 
         [Header("Crunched (Broken 상태에서 손가락으로 주무를 때)")]
         [Tooltip("한 손가락의 세기 변화량이 이만큼 쌓일 때마다 그 손가락에 Crunched를 한 번 보낸다.")]
@@ -69,16 +71,23 @@ namespace WaxBall
 
         /// <summary>파손된 표면 비율(0~1). WaxBallDamage가 넘긴다. 한 번이라도 넘어오면(접촉점 씬) 섞임 판정이 면적 기준이 된다.</summary>
         public float DamagedRatio { get; private set; }
+
+        /// <summary>깨진 자리의 평균 섞임(0~1, 깨진 면적 가중). 흔적마다 쌓은 주무른 양에서 WaxBallDamage가 계산한다.</summary>
+        public float AverageMix { get; private set; }
         public bool AreaMixMode { get; private set; }
         public float MixAreaThreshold => mixAreaThreshold;
+        public float MixAverageThreshold => mixAverageThreshold;
+        public float KneadAmountToMix => kneadAmountToMix;
 
-        /// <summary>섞임 진행도(0~1). 접촉점 씬은 파손 면적 / 기준값(Broken 전에는 0), 아니면 주무른 양 기준.</summary>
+        /// <summary>
+        /// 섞임 진행도(0~1). 접촉점 씬은 깨진 자리의 평균 섞임(Broken 전에는 0), 아니면 전체 주무른 양 기준이다.
+        /// </summary>
         public float MixProgress
         {
             get
             {
                 if (!AreaMixMode) return Mathf.Clamp01(KneadAccumulated / kneadAmountToMix);
-                return State >= WaxBallState.Broken ? Mathf.Clamp01(DamagedRatio / mixAreaThreshold) : 0f;
+                return State >= WaxBallState.Broken ? AverageMix : 0f;
             }
         }
 
@@ -101,11 +110,12 @@ namespace WaxBall
             Evaluate();
         }
 
-        /// <summary>파손된 표면 비율(0~1)을 알린다. 이 값이 들어오면 Mixed 판정이 주무른 양 대신 면적 기준이 된다.</summary>
-        public void SetDamagedRatio(float ratio)
+        /// <summary>파손된 표면 비율과 깨진 자리의 평균 섞임(0~1)을 알린다. 이 값이 들어오면 Mixed 판정이 전체 주무른 양 대신 이 두 값 기준이 된다.</summary>
+        public void SetDamagedRatio(float ratio, float averageMix)
         {
             AreaMixMode = true;
             DamagedRatio = Mathf.Clamp01(ratio);
+            AverageMix = Mathf.Clamp01(averageMix);
             Evaluate();
         }
 
@@ -158,6 +168,7 @@ namespace WaxBall
             Grip = 0f;
             KneadAccumulated = 0f;
             DamagedRatio = 0f;
+            AverageMix = 0f;
             for (int i = 0; i < FingerCount; i++)
             {
                 fingerPressure[i] = 0f;
@@ -186,12 +197,18 @@ namespace WaxBall
                         if (Grip >= breakThreshold) { ChangeState(WaxBallState.Broken); continue; }
                         return;
                     case WaxBallState.Broken:
-                        if (MixProgress >= 1f) { ChangeState(WaxBallState.Mixed); }
+                        if (ShouldMix()) { ChangeState(WaxBallState.Mixed); }
                         return;
                     default:
                         return;
                 }
             }
+        }
+
+        private bool ShouldMix()
+        {
+            if (!AreaMixMode) return KneadAccumulated >= kneadAmountToMix;
+            return DamagedRatio >= mixAreaThreshold && AverageMix >= mixAverageThreshold;
         }
 
         private void RaiseCrunched(WaxFinger finger)

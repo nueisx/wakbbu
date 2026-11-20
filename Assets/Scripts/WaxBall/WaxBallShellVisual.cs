@@ -30,8 +30,10 @@ namespace WaxBall
         [SerializeField, Range(0f, 1f)] private float fragmentBase = 0.2f;
         [Tooltip("쥐는 힘(grip)이 쪼개짐에 주는 비중. 작을수록 트리거를 조금 움직여서는 쪼개지지 않는다.")]
         [SerializeField, Range(0f, 1f)] private float fragmentGripWeight = 0.1f;
-        [Tooltip("주무른 양(MixProgress)이 쪼개짐에 주는 비중. 클수록 여러 번 주물러야 점점 잘게 깨진다.")]
+        [Tooltip("주무른 양(MixProgress, 접촉점 씬은 흔적마다 주무른 양)이 쪼개짐에 주는 비중. 클수록 여러 번 주물러야 점점 잘게 깨진다.")]
         [SerializeField, Range(0f, 1f)] private float fragmentKneadWeight = 0.7f;
+        [Tooltip("접촉점 씬에서 남은 부분까지 채우기 시작하는 진행도(평균 섞임 / Mixed 기준값). 깨진 면적이 기준 이상일 때만 채운다.")]
+        [SerializeField, Range(0.5f, 1f)] private float mixFillStart = 0.85f;
         [Tooltip("grip이 최대일 때 손가락 쪽이 둥글게 들어가는 정도.")]
         [SerializeField, Range(0f, 1f)] private float dentStrength = 0.5f;
         [Tooltip("오목한 정도가 grip을 따라가는 속도.")]
@@ -48,6 +50,9 @@ namespace WaxBall
         private static readonly int StampsId = Shader.PropertyToID("_Stamps");
         private static readonly int BrokenAmountId = Shader.PropertyToID("_BrokenAmount");
         private static readonly int FragmentId = Shader.PropertyToID("_Fragment");
+        private static readonly int StampMixId = Shader.PropertyToID("_StampMix");
+        private static readonly int MixFillId = Shader.PropertyToID("_MixFill");
+        private static readonly int FragmentKneadId = Shader.PropertyToID("_FragmentKnead");
         private static readonly int MixAmountId = Shader.PropertyToID("_MixAmount");
         private static readonly int DentDirId = Shader.PropertyToID("_DentDir");
         private static readonly int DentAmountId = Shader.PropertyToID("_DentAmount");
@@ -63,6 +68,7 @@ namespace WaxBall
         private float brokenAmount;
         private float fragmentAmount;
         private float dentAmount;
+        private float mixFill;
 
         // 셰이더에 넘기는 균열 파라미터. A = (시작점 xyz, 길이 배율), B = (방향 각도, 휘어짐, 시드, 폭 배율)
         private Vector3 crackStart1;
@@ -70,6 +76,7 @@ namespace WaxBall
         private Vector4 crack1A, crack1B, crack2A, crack2B;
         private bool startsOverridden;
         private readonly Vector4[] stamps = new Vector4[WaxBallDamage.MaxStamps];
+        private readonly float[] stampMix = new float[WaxBallDamage.MaxStamps];
 
         private void Awake()
         {
@@ -165,7 +172,10 @@ namespace WaxBall
             // 주물러서 쌓인 양(MixProgress)이 늘수록 판이 점점 잘게 쪼개지고, 쥐는 힘은 조금만 거든다.
             // 한 번 쪼개진 판은 다시 합쳐지지 않는다.
             float gripFactor = Mathf.InverseLerp(stateMachine.BreakThreshold, 1f, stateMachine.Grip);
-            float target = Mathf.Clamp01(fragmentBase + fragmentGripWeight * gripFactor + fragmentKneadWeight * stateMachine.MixProgress);
+            // 접촉점 씬은 주무른 양 몫을 셰이더가 흔적마다 더하므로 여기서는 뺀다.
+            bool local = damage != null && damage.LocalMode;
+            float kneadPart = local ? 0f : fragmentKneadWeight * stateMachine.MixProgress;
+            float target = Mathf.Clamp01(fragmentBase + fragmentGripWeight * gripFactor + kneadPart);
             fragmentAmount = Mathf.Max(fragmentAmount, Mathf.MoveTowards(fragmentAmount, target, fragmentSpeed * Time.deltaTime));
         }
 
@@ -196,11 +206,19 @@ namespace WaxBall
                     a2 = new Vector4(anchor2.x, anchor2.y, anchor2.z, crack2A.w);
                 else amount2 = 0f;
 
-                damage.FillShaderStamps(stamps);
+                damage.FillShaderStamps(stamps, stampMix);
                 block.SetVectorArray(StampsId, stamps);
+                block.SetFloatArray(StampMixId, stampMix);
+
+                // 깨진 면적이 기준 이상이고 평균 섞임이 Mixed에 가까울 때만 남은 부분까지 채운다.
+                float progress = Mathf.Clamp01(stateMachine.MixProgress / stateMachine.MixAverageThreshold);
+                bool areaReached = damage.DamagedRatio >= stateMachine.MixAreaThreshold;
+                mixFill = areaReached ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(mixFillStart, 1f, progress)) : 0f;
             }
 
             block.SetFloat(LocalDamageId, local ? 1f : 0f);
+            block.SetFloat(MixFillId, local ? mixFill : 0f);
+            block.SetFloat(FragmentKneadId, local ? fragmentKneadWeight : 0f);
             block.SetVector(CrackAmountsId, new Vector4(amount1, amount2, 0f, 0f));
             block.SetFloat(BrokenAmountId, brokenAmount);
             block.SetFloat(FragmentId, fragmentAmount);

@@ -45,7 +45,8 @@ Shader "WaxBall/WaxShell"
 
         [Header(Mixed)]
         _MixAmount("Mix Amount (MixProgress)", Range(0, 1)) = 0
-        _MixFillStart("Mix Fill Start (이 MixProgress부터 남은 부분도 점토로 채움)", Range(0.5, 1)) = 0.85
+        _MixFill("Mix Fill (접촉점을 쓸 때 Mixed 직전에 남은 부분까지 점토로 채우는 정도)", Range(0, 1)) = 0
+        _FragmentKnead("Fragment Knead (주무른 양이 쪼개짐에 더하는 정도)", Range(0, 1)) = 0
         _PieceFraction("Piece Fraction (Mixed에서 남는 작은 판의 비율)", Range(0.05, 0.9)) = 0.45
         _PieceInset("Piece Inset (남는 조각이 가장자리에서 줄어든 폭, 클수록 작은 조각)", Range(0.005, 0.08)) = 0.03
 
@@ -96,7 +97,9 @@ Shader "WaxBall/WaxShell"
                 float _LocalDamage;
                 float4 _Stamps[8];
                 float _MixAmount;
-                float _MixFillStart;
+                float _MixFill;
+                float _FragmentKnead;
+                float _StampMix[8];
                 float _PieceFraction;
                 float _PieceInset;
                 float _RimWidth;
@@ -253,8 +256,9 @@ Shader "WaxBall/WaxShell"
             // 판 사이 틈(Voronoi 경계). gate: 이 경계가 얼마나 나타났는지(0~1), 클수록 넓다.
             // isFine: 작은 판 층이면 1. Mixed에서 작은 판 중 일부(_PieceFraction)만 작은 조각으로 남고 나머지는 점토에 묻혀 사라진다.
             // 큰 판 층(isFine = 0)의 틈은 섞일수록 가늘어져서 남은 조각을 자르지 않는다.
+            // mix: 이 자리의 섞임 정도(0~1). 접촉점을 쓰면 흔적마다 주무른 양을 따르고, 아니면 전체 값(_MixAmount)이다.
             // mask: 파손 흔적 주변 정도(0~1). 경계마다 나타나는 반경이 달라서 파손 범위가 경계를 따라 하나씩 번져 나간다.
-            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine, float mask)
+            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine, float mask, float mix)
             {
                 gate *= saturate((mask * 1.2 - v.lineHash * 0.85) * 6.0);
                 float cellGate = saturate((mask * 1.2 - v.cellHash * 0.85) * 6.0);
@@ -266,7 +270,7 @@ Shader "WaxBall/WaxShell"
 
                 float widthVariation = lerp(0.5, 1.5, Noise3(q * 4.0 + seed * 1.7));
                 float wBase = _PlateGapWidth * 0.5 * widthScale * gate * widthVariation;
-                float w = wBase * (1.0 - _MixAmount * lerp(0.85, 1.0, isFine));
+                float w = wBase * (1.0 - mix * lerp(0.85, 1.0, isFine));
                 float wMix = 0.0;
 
                 if (isFine > 0.5)
@@ -275,31 +279,40 @@ Shader "WaxBall/WaxShell"
                     float survive = step(1.0 - _PieceFraction, v.cellHash);
                     float inset = _PieceInset * lerp(0.6, 1.4, v.cellHash2);
                     float vanish = (0.7 / scale) / (0.3 + 0.65 * v.cellHash2);
-                    wMix = _MixAmount * lerp(vanish, inset, survive) * cellGate;
+                    wMix = mix * lerp(vanish, inset, survive) * cellGate;
                     w = max(w, wMix);
                 }
 
                 float inside = step(0.001, gate + wMix) * step(0.001, _BrokenAmount);
-                float rimW = _RimWidth * lerp(1.0, lerp(1.0, 0.35, _MixAmount), isFine);
+                float rimW = _RimWidth * lerp(1.0, lerp(1.0, 0.35, mix), isFine);
                 float3 away = -(v.grad - dot(v.grad, q) * q);
                 return MakeGap(d, px, w, inside, rimW, normalize(away + 1e-5));
             }
 
             // 파손 흔적 주변이 얼마나 깨졌는지(0~1). 흔적은 (방향 xyz, 반경의 코사인)이고 빈 칸은 코사인이 2다.
-            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 공 전체가 깨진다. MixProgress가 _MixFillStart를 넘으면 남은 부분도 채운다.
-            float DamageMask(float3 q)
+            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 공 전체가 깨지고 섞임은 _MixAmount 하나다.
+            // 접촉점을 쓰면 localMix는 흔적마다 주무른 양을 따르고, _MixFill이 커지면 남은 부분도 채운다.
+            float DamageMask(float3 q, out float localMix)
             {
-                if (_LocalDamage < 0.5) return 1.0;
+                if (_LocalDamage < 0.5)
+                {
+                    localMix = _MixAmount;
+                    return 1.0;
+                }
 
                 float mask = 0.0;
+                localMix = 0.0;
                 for (int i = 0; i < 8; i++)
                 {
                     float4 stamp = _Stamps[i];
                     float inner = lerp(stamp.w, 1.0, 0.45);
                     float t = saturate((dot(q, stamp.xyz) - stamp.w) / max(inner - stamp.w, 1e-4));
-                    mask = max(mask, t * t * (3.0 - 2.0 * t));
+                    float m = t * t * (3.0 - 2.0 * t);
+                    mask = max(mask, m);
+                    localMix = max(localMix, _StampMix[i] * saturate(t * 3.0));
                 }
-                return max(mask, smoothstep(_MixFillStart, 1.0, _MixAmount));
+                localMix = max(localMix, _MixFill);
+                return max(mask, _MixFill);
             }
 
             Varyings vert(Attributes input)
@@ -337,15 +350,16 @@ Shader "WaxBall/WaxShell"
                 Gap crack1 = Crack(q, _Crack1A, _Crack1B, _CrackAmounts.x);
                 Gap crack2 = Crack(q, _Crack2A, _Crack2B, _CrackAmounts.y);
 
-                float mask = DamageMask(q);
+                float localMix;
+                float mask = DamageMask(q, localMix);
 
                 // Broken: 큰 판 사이 틈 + 큰 판 안에 하나씩 생기는 작은 판 경계
                 float fineScale = _PlateScale * _FineScaleMul;
                 VoronoiResult plateCells = Voronoi(q * _PlateScale);
                 VoronoiResult fineCells = Voronoi(q * fineScale);
-                float fineGate = saturate((_Fragment - fineCells.lineHash * 0.9) * 5.0) * _BrokenAmount;
-                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1, 0.0, mask);
-                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0, mask);
+                float fineGate = saturate((saturate(_Fragment + _FragmentKnead * localMix) - fineCells.lineHash * 0.9) * 5.0) * _BrokenAmount;
+                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1, 0.0, mask, localMix);
+                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0, mask, localMix);
 
                 float cover = max(max(crack1.cover, crack2.cover), max(plate0.cover, plate1.cover));
                 float rim = max(max(crack1.rim, crack2.rim), max(plate0.rim, plate1.rim));
