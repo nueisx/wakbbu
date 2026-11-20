@@ -5,10 +5,13 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/Dev_WaxBallQuest.unity
+    guid: 84fde6ddee30e4a9ca85203f46159c8a
   - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/Dev_QuestBuildTest.unity
     guid: 7a4578fdc0f4345bb970b1c666798e60
   m_configObjects:
