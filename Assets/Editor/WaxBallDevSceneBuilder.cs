@@ -33,6 +33,7 @@ public static class WaxBallDevSceneBuilder
                 existing = GameObject.Find(name);
             }
         }
+        RemoveStaleFakeFingers();
 
         var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         ball.name = "WaxBall";
@@ -96,6 +97,25 @@ public static class WaxBallDevSceneBuilder
 
         Undo.RegisterCreatedObjectUndo(ball, "Create WaxBall Dev Objects");
         Selection.activeGameObject = ball;
+    }
+
+    // 예전 구조(손가락 5개, FakeFinger0~4)나 Undo 때문에 FakeFingers 밖에 남은 가짜 손가락, 그리고
+    // FakeFingers 아래에 있지만 Thumb/Index/Middle이 아닌 오브젝트를 지운다.
+    private static void RemoveStaleFakeFingers()
+    {
+        var valid = new System.Collections.Generic.HashSet<string>();
+        foreach (WaxFinger finger in System.Enum.GetValues(typeof(WaxFinger))) valid.Add("Fake" + finger);
+
+        var stale = new System.Collections.Generic.List<GameObject>();
+        foreach (var t in Object.FindObjectsOfType<Transform>(true))
+        {
+            bool underRoot = t.parent != null && t.parent.name == "FakeFingers";
+            bool legacyName = t.name.StartsWith("FakeFinger") && t.name != "FakeFingers";
+            if ((underRoot && !valid.Contains(t.name)) || legacyName) stale.Add(t.gameObject);
+        }
+
+        foreach (var go in stale)
+            if (go != null) Undo.DestroyObjectImmediate(go);
     }
 
     // 공 주변에 가짜 손가락 3개를 만든다. Scene 뷰에서 Move 도구로 드래그해 접촉 위치를 옮긴다.
