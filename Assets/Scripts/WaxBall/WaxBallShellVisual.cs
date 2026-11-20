@@ -23,7 +23,7 @@ namespace WaxBall
 
         [Header("파열")]
         [Tooltip("Broken에 들어갈 때 큰 판으로 갈라지는 데 걸리는 시간(초). 시각 효과만 늦춘다. StateChanged와 햅틱 이벤트는 즉시 발생한다.")]
-        [SerializeField, Min(0.01f)] private float brokenRampDuration = 0.3f;
+        [SerializeField, Min(0.01f)] private float brokenRampDuration = 0.6f;
         [Tooltip("판이 더 잘게 쪼개지는 속도(1/초). 작을수록 천천히 쪼개진다.")]
         [SerializeField, Min(0.01f)] private float fragmentSpeed = 0.5f;
         [Tooltip("Broken에 막 들어갔을 때 이미 쪼개져 있는 정도(0~1).")]
