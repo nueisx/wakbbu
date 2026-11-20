@@ -1,8 +1,10 @@
 // 왁뿌볼 껍질용 URP 셰이더. 기준은 docs/references/README.md의 실제 왁뿌볼 사진이다.
 // 구조: 투명 고무 케이스 > 색깔 있는 왁스 껍질(납작한 판) > 흰 점토. 이 셰이더는 케이스 아래로 보이는 모습을 그린다.
 // - Idle/Pressed: 매끈한 단색 공. 균열 없음.
-// - Cracked(_CrackAmount): 판은 그대로이고 삐뚤빼뚤한 균열 두 줄을 따라 흰 점토가 불룩하게 비집고 나온다.
+// - Cracked(_CrackAmounts): 판은 그대로이고 삐뚤빼뚤한 균열 두 줄을 따라 흰 점토가 불룩하게 비집고 나온다.
 //   균열의 시작점, 방향, 길이, 휘어짐은 C#(WaxBallShellVisual)이 리셋마다 무작위로 넣는다(_Crack1A/B, _Crack2A/B).
+// - 접촉점을 쓰면(_LocalDamage = 1) Broken과 Mixed의 판 갈라짐이 손가락이 누른 자리(_Stamps) 주변에서 시작해 번져 나가고,
+//   MixProgress가 커질수록 공 전체로 퍼진다. 접촉점을 쓰지 않으면 공 전체가 깨진다.
 // - Broken(_BrokenAmount, _Fragment): 큰 판 몇 개로 갈라지고 틈은 흰 점토 색이다.
 //   _Fragment가 커질수록 큰 판 안에 작은 판 경계가 하나씩 생겨 더 잘게 쪼개진다.
 // - Mixed(_MixAmount = MixProgress): 작은 판 중 일부(_PieceFraction)만 가장자리가 줄어든 작은 조각으로 남고 나머지는 점토에 묻힌다.
@@ -20,7 +22,7 @@ Shader "WaxBall/WaxShell"
         _ClayColor("Clay Color (점토)", Color) = (0.98, 0.98, 0.96, 1)
 
         [Header(Crack)]
-        _CrackAmount("Crack Amount", Range(0, 1)) = 0
+        _CrackAmounts("Crack Amounts (x: 첫 번째 균열, y: 두 번째 균열)", Vector) = (0, 0, 0, 0)
         _CrackLength("Crack Length (한쪽 끝까지 호의 비율)", Range(0.1, 0.8)) = 0.35
         _GapWidth("Gap Width (가장 넓을 때 반폭, 구 반지름 기준)", Range(0.01, 0.3)) = 0.1
         _Crack1A("Crack 1 Start(xyz) / Length", Vector) = (-0.25, 0.2, -1, 1)
@@ -36,6 +38,9 @@ Shader "WaxBall/WaxShell"
         _PlateGapWidth("Plate Gap Width (틈 전체 폭, 구 반지름 기준)", Range(0.02, 0.4)) = 0.2
         _DentDir("Dent Direction (오브젝트 공간)", Vector) = (0, 0, -1, 0)
         _DentAmount("Dent Amount", Range(0, 1)) = 0
+
+        [Header(Local Damage)]
+        _LocalDamage("Local Damage (0 = 공 전체가 깨짐, 1 = 파손 흔적 주변만)", Range(0, 1)) = 0
 
         [Header(Mixed)]
         _MixAmount("Mix Amount (MixProgress)", Range(0, 1)) = 0
@@ -72,7 +77,7 @@ Shader "WaxBall/WaxShell"
             CBUFFER_START(UnityPerMaterial)
                 half4 _ShellColor;
                 half4 _ClayColor;
-                float _CrackAmount;
+                float4 _CrackAmounts;
                 float _CrackLength;
                 float _GapWidth;
                 float4 _Crack1A;
@@ -86,6 +91,8 @@ Shader "WaxBall/WaxShell"
                 float _PlateGapWidth;
                 float4 _DentDir;
                 float _DentAmount;
+                float _LocalDamage;
+                float4 _Stamps[8];
                 float _MixAmount;
                 float _PieceFraction;
                 float _PieceInset;
@@ -239,8 +246,12 @@ Shader "WaxBall/WaxShell"
             // 판 사이 틈(Voronoi 경계). gate: 이 경계가 얼마나 나타났는지(0~1), 클수록 넓다.
             // isFine: 작은 판 층이면 1. Mixed에서 작은 판 중 일부(_PieceFraction)만 작은 조각으로 남고 나머지는 점토에 묻혀 사라진다.
             // 큰 판 층(isFine = 0)의 틈은 섞일수록 가늘어져서 남은 조각을 자르지 않는다.
-            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine)
+            // mask: 파손 흔적 주변 정도(0~1). 경계마다 나타나는 반경이 달라서 파손 범위가 경계를 따라 하나씩 번져 나간다.
+            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine, float mask)
             {
+                gate *= saturate((mask * 1.2 - v.lineHash * 0.85) * 6.0);
+                float cellGate = saturate((mask * 1.2 - v.cellHash * 0.85) * 6.0);
+
                 // 셀 단위 거리를 구 반지름 단위 거리로 바꾼다(경계까지 거리 ≈ edge의 절반).
                 float dBase = 0.5 * v.edge / scale;
                 float px = fwidth(dBase);
@@ -257,7 +268,7 @@ Shader "WaxBall/WaxShell"
                     float survive = step(1.0 - _PieceFraction, v.cellHash);
                     float inset = _PieceInset * lerp(0.6, 1.4, v.cellHash2);
                     float vanish = (0.7 / scale) / (0.3 + 0.65 * v.cellHash2);
-                    wMix = _MixAmount * lerp(vanish, inset, survive);
+                    wMix = _MixAmount * lerp(vanish, inset, survive) * cellGate;
                     w = max(w, wMix);
                 }
 
@@ -265,6 +276,23 @@ Shader "WaxBall/WaxShell"
                 float rimW = _RimWidth * lerp(1.0, lerp(1.0, 0.35, _MixAmount), isFine);
                 float3 away = -(v.grad - dot(v.grad, q) * q);
                 return MakeGap(d, px, w, inside, rimW, normalize(away + 1e-5));
+            }
+
+            // 파손 흔적 주변이 얼마나 깨졌는지(0~1). 흔적은 (방향 xyz, 반경의 코사인)이고 빈 칸은 코사인이 2다.
+            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 공 전체가 깨진다. MixProgress가 커지면 공 전체로 퍼진다.
+            float DamageMask(float3 q)
+            {
+                if (_LocalDamage < 0.5) return 1.0;
+
+                float mask = 0.0;
+                for (int i = 0; i < 8; i++)
+                {
+                    float4 stamp = _Stamps[i];
+                    float inner = lerp(stamp.w, 1.0, 0.45);
+                    float t = saturate((dot(q, stamp.xyz) - stamp.w) / max(inner - stamp.w, 1e-4));
+                    mask = max(mask, t * t * (3.0 - 2.0 * t));
+                }
+                return max(mask, smoothstep(0.6, 1.0, _MixAmount));
             }
 
             Varyings vert(Attributes input)
@@ -293,18 +321,19 @@ Shader "WaxBall/WaxShell"
                 float3 q = normalize(input.unitPos);
                 float3 viewDir = GetWorldSpaceNormalizeViewDir(input.positionWS);
 
-                // 균열 두 줄. 두 번째는 늦게 나타난다.
-                float amount2 = saturate((_CrackAmount - 0.3) / 0.7) * 0.75;
-                Gap crack1 = Crack(q, _Crack1A, _Crack1B, _CrackAmount);
-                Gap crack2 = Crack(q, _Crack2A, _Crack2B, amount2);
+                // 균열 두 줄. 시작점과 길이는 C#이 정한다(접촉점을 쓰면 손가락 아래에서 시작한다).
+                Gap crack1 = Crack(q, _Crack1A, _Crack1B, _CrackAmounts.x);
+                Gap crack2 = Crack(q, _Crack2A, _Crack2B, _CrackAmounts.y);
+
+                float mask = DamageMask(q);
 
                 // Broken: 큰 판 사이 틈 + 큰 판 안에 하나씩 생기는 작은 판 경계
                 float fineScale = _PlateScale * _FineScaleMul;
                 VoronoiResult plateCells = Voronoi(q * _PlateScale);
                 VoronoiResult fineCells = Voronoi(q * fineScale);
                 float fineGate = saturate((_Fragment - fineCells.lineHash * 0.9) * 5.0) * _BrokenAmount;
-                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1, 0.0);
-                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0);
+                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1, 0.0, mask);
+                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0, mask);
 
                 float cover = max(max(crack1.cover, crack2.cover), max(plate0.cover, plate1.cover));
                 float rim = max(max(crack1.rim, crack2.rim), max(plate0.rim, plate1.rim));
