@@ -14,6 +14,7 @@
 //   하이라이트(창 모양 반사, 광원 반사)와 표면 물결, 환경 반사는 부자연스럽거나 AR 배경(실제 방)과 맞지 않아 쓰지 않는다.
 // 균열과 틈 선은 화면에서 1px 아래로 가늘어지지 않게 보정한다.
 // Quest 성능을 위해 단일 Forward 패스, 텍스처 없이 절차적으로만 계산한다.
+// Quest는 Multiview 스테레오를 쓰므로 정점·프래그먼트 단계에 스테레오 인스턴싱 매크로를 넣었다(없으면 눈마다 그림이 틀어진다).
 Shader "WaxBall/WaxShell"
 {
     Properties
@@ -105,10 +106,13 @@ Shader "WaxBall/WaxShell"
                 float _CasingEdge;
             CBUFFER_END
 
+            // Quest는 Multiview(한 번에 양쪽 눈을 그림)를 쓰므로 스테레오 인스턴싱 매크로가 꼭 필요하다.
+            // 빠지면 한쪽 눈이 비거나 양쪽 눈이 같은 그림으로 나온다.
             struct Attributes
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -116,6 +120,7 @@ Shader "WaxBall/WaxShell"
                 float4 positionCS : SV_POSITION;
                 float3 positionWS : TEXCOORD0;
                 float3 unitPos : TEXCOORD1;
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             // 틈 한 줄(또는 한 경계)이 만드는 결과
@@ -297,6 +302,10 @@ Shader "WaxBall/WaxShell"
 
             Varyings vert(Attributes input)
             {
+                Varyings output;
+                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
+
                 float3 positionOS = input.positionOS.xyz;
                 float3 normalOS = normalize(input.normalOS);
                 // 유니티 기본 구는 반지름 0.5이므로 2를 곱해 단위 구로 맞춘다.
@@ -309,7 +318,6 @@ Shader "WaxBall/WaxShell"
                     positionOS -= normalOS * dentMask * _DentAmount * 0.17;
                 }
 
-                Varyings output;
                 output.positionWS = TransformObjectToWorld(positionOS);
                 output.positionCS = TransformWorldToHClip(output.positionWS);
                 output.unitPos = unitPos;
@@ -318,6 +326,8 @@ Shader "WaxBall/WaxShell"
 
             half4 frag(Varyings input) : SV_Target
             {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
                 float3 q = normalize(input.unitPos);
                 float3 viewDir = GetWorldSpaceNormalizeViewDir(input.positionWS);
 

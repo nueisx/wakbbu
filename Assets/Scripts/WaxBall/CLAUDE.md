@@ -12,6 +12,9 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 | `WaxBall/WaxBallStateMachine.cs` | 상태 판정의 유일한 장소(공 전체 기준). `SetGrip()`, `SetFingerPressure()`, `ResetBall()`, `StateChanged`, `Crunched(finger, strength)`, `Grip`, `MixProgress` |
 | `WaxBall/WaxFinger.cs` | `enum WaxFinger { Thumb, Index, Middle }` (WEART TouchDIVER G1이 지원하는 세 손가락) |
 | `WaxBall/WaxBallContacts.cs` | 손가락 접촉점 입력 API(세 손가락, 위치 + 세기). 장비 의존 없음. 전체 grip 합치기(최댓값/평균) |
+| `../Interaction/QuestControllerInput.cs` | Quest 컨트롤러 입력 어댑터(오른손 트리거 0~1 → `SetGrip`, A 버튼 → 리셋) |
+| `../Interaction/FaceHeadset.cs` | 월드 공간 UI(디버그 텍스트)가 헤드셋을 향하게 함 |
+| `Assets/Editor/WaxBallQuestSceneBuilder.cs` | 메뉴 `WaxBall > Create Quest WaxBall Scene`으로 Quest용 씬(`Dev_WaxBallQuest`)을 만듦 |
 | `../Interaction/FakeFingerContacts.cs` | 에디터 테스트용 가짜 손가락 3개(Scene 뷰에서 드래그, 세기는 Slider grip). 기본 배치는 세 손가락으로 집는 모양(엄지가 검지·중지 반대편) |
 | `WaxBall/WaxBallDamage.cs` | 손가락이 누른 자리의 파손 범위 모델(파손 흔적 최대 8개). 렌더링은 하지 않음. 균열을 붙일 손가락 선택 |
 | `WaxBall/WaxBallShellVisual.cs` | 상태와 grip을 읽어 셰이더 값(균열·파열·섞임)과 찌그러짐을 갱신. 균열 모양을 리셋마다 무작위로 뽑음 |
@@ -137,6 +140,19 @@ Mixed 구현: 작은 판(Voronoi 셀)마다 무작위 값을 둔다. 셀의 `Pie
 
 ---
 
+### Quest 실기기 씬 (`Dev_WaxBallQuest.unity`)
+
+- 메뉴 **`WaxBall > Create Quest WaxBall Scene`** 이 패스스루가 켜진 `Dev_QuestBuildTest`를 복사해 만든다(여러 번 실행해도 같은 파일을 다시 구성한다). 에디터용 Slider 씬(`dev_waxball`)은 건드리지 않는다.
+- 공은 **지름 7cm, 눈앞 35cm**(`(0, 0, 0.35)`)에 있다. 추적 원점이 EyeLevel이라 앱을 켠 순간 머리 위치가 원점이다.
+- **입력**: 오른손 컨트롤러 **트리거(0~1) = grip**, **A 버튼 = 리셋**. 리셋 뒤에는 트리거를 한 번 놓을 때까지 grip이 0이라 쥔 채로 리셋해도 새 공이 바로 깨지지 않는다.
+- **디버그 텍스트**는 공 오른쪽 12cm에 월드 공간으로 작게(15cm 폭, 글자 약 9mm) 뜨고 헤드셋을 향한다. 상태, grip, 섞임, Crunch, 파손 흔적, FPS를 표시한다.
+- 접촉점 입력이 없으므로 기본은 **공 전체가 깨지는 방식**(셰이더가 가장 무거운 경우)이다. 가짜 손가락(`FakeFingers`)은 꺼 두었다. 켜면 고정된 세 손가락 자리 주변에서만 깨지는 접촉점 방식을 Quest에서 볼 수 있다.
+- 큐브와 `Global Volume`(포스트 프로세싱)은 지웠다. 이 씬을 만들면 Build Settings에서 이 씬만 켜진다.
+
+**양쪽 눈 확인 (Multiview)**: Quest는 Multiview로 양쪽 눈을 한 번에 그린다. 커스텀 셰이더에는 스테레오 인스턴싱 매크로가 필수이고 `WaxShell.shader`에 넣어 두었다(없으면 한쪽 눈이 비거나 양쪽이 같은 그림이 된다). 새 셰이더를 만들 때도 같은 매크로를 넣는다. 확인은 헤드셋을 쓰고 공을 가까이 본 채 한쪽 눈씩 번갈아 감아서, 두 눈에 같은 위치와 균열이 보이고 입체감이 있는지, 깜빡이거나 이중으로 보이는지 본다.
+
+**성능 확인**: 디버그 텍스트의 FPS는 프레임 간격이라 GPU 여유까지 알려 주지 않는다. **OVR Metrics Tool**(헤드셋 안 오버레이)이나 Meta Quest Developer Hub의 Performance Analyzer로 앱 FPS, GPU 사용률, 프레임 타임을 본다. 셰이더가 가장 무거운 경우(공 전체가 깨진 Broken에서 Mixed로 가는 구간, 공을 가까이)에서 90Hz 기준 GPU 프레임 타임이 약 11ms 안인지, 72/90 FPS 아래로 떨어지지 않는지 확인한다. 부담이면 Voronoi 계산을 줄인다.
+
 ## 6. 실물 공 정렬과 grip 보정 (Unity 담당 구현)
 
 - 가상 왁뿌볼은 실물 스펀지 공과 **같은 위치·크기**로 보여야 한다. 실물 공 지름을 재서 가상 공 크기를 맞춘다.
@@ -168,3 +184,4 @@ Mixed 구현: 작은 판(Voronoi 셀)마다 무작위 값을 둔다. 셀의 `Pie
 - `.meta` 파일을 지우거나 새로 만들지 말 것.
 - 셰이더 속성 이름을 바꾸면 `WaxBallShellVisual`과 머티리얼의 저장된 값이 어긋난다. 함께 고친다.
 - 환경 반사, 파편 오브젝트, 파티클은 넣지 않는다(3장 이유 참고).
+- 새 셰이더에는 스테레오 인스턴싱 매크로(`UNITY_VERTEX_INPUT_INSTANCE_ID`, `UNITY_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_INSTANCE_ID`, `UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX`)를 반드시 넣는다. Quest는 Multiview를 쓴다.
