@@ -9,7 +9,9 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 
 | 파일 | 역할 |
 |---|---|
-| `WaxBall/WaxBallStateMachine.cs` | 상태 판정의 유일한 장소. `SetGrip()`, `ResetBall()`, `StateChanged`, `Crunched`, `Grip`, `MixProgress` |
+| `WaxBall/WaxBallStateMachine.cs` | 상태 판정의 유일한 장소(공 전체 기준). `SetGrip()`, `SetFingerPressure()`, `ResetBall()`, `StateChanged`, `Crunched(finger, strength)`, `Grip`, `MixProgress` |
+| `WaxBall/WaxBallContacts.cs` | 손가락 접촉점 입력 API(최대 5개, 위치 + 세기). 장비 의존 없음. 전체 grip 합치기(최댓값/평균) |
+| `../Interaction/FakeFingerContacts.cs` | 에디터 테스트용 가짜 손가락 5개(Scene 뷰에서 드래그, 세기는 Slider grip) |
 | `WaxBall/WaxBallShellVisual.cs` | 상태와 grip을 읽어 셰이더 값(균열·파열·섞임)과 찌그러짐을 갱신. 균열 모양을 리셋마다 무작위로 뽑음 |
 | `WaxBall/WaxBallTempVisual.cs` | 초기 임시 시각 효과(상태별 색). 지금 빌더는 쓰지 않는다 |
 | `../Interaction/SliderGripInput.cs` | 에디터 테스트용 입력 어댑터(Slider → `SetGrip`, R 키/버튼 → 리셋) |
@@ -28,10 +30,11 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 - 임계값(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`)은 하드코딩하지 않고 `[SerializeField]`로 노출한다. 값은 Interaction 담당이 정한다.
 - `SetGrip()`은 grip을 0~1로 clamp하고, 한 번에 큰 값이 들어와도 **중간 상태 이벤트를 빠뜨리지 않도록 한 단계씩** 진행한다.
 - Broken 이후에는 grip 변화량을 `KneadAccumulated`에 누적하고, `MixProgress = KneadAccumulated / kneadAmountToMix`(0~1)이다.
-- **Crunched**: Broken 상태에서 grip 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 한 번 발생한다.
-  - 세기는 grip 변화 속도로 정한다. `crunchFullSpeed`(기본 2 grip/초) 이상이면 1, 가장 느리면 `crunchMinStrength`(기본 0.2).
-  - C# `event Action<float> Crunched`, Inspector `UnityEvent<float> onCrunched`.
-  - Broken에 막 진입한 순간의 grip 변화는 세지 않는다. Mixed에서는 발생하지 않는다.
+- **Crunched(finger, strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
+  - 세기는 그 손가락의 세기 변화 속도로 정한다. `crunchFullSpeed`(기본 2/초) 이상이면 1, 가장 느리면 `crunchMinStrength`(기본 0.2).
+  - C# `event Action<int, float> Crunched`, Inspector `UnityEvent<int, float> onCrunched`.
+  - Broken에 막 진입한 순간의 변화는 세지 않는다. Mixed에서는 발생하지 않는다. `SetGrip`만으로는 발생하지 않는다.
+  - 상태(`StateChanged`)와 `MixProgress`는 여전히 공 전체 grip(`SetGrip`) 기준이다.
 - `ResetBall()`은 grip, 섞임 누적값, Crunched 누적값을 0으로 돌리고 `Idle`로 바꾼다. 어느 상태에서든, 횟수 제한 없이 호출할 수 있다.
 - 런타임에 생성한 오브젝트가 생기면 리셋 시 반드시 정리한다(무한 반복해도 메모리가 누적되지 않게). 현재는 런타임 생성 오브젝트가 없다.
 - 이 폴더의 코드는 `WaxBall` 네임스페이스를 쓴다.

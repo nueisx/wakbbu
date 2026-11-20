@@ -110,10 +110,11 @@
 | 이벤트 | 언제 | 값 |
 |---|---|---|
 | `StateChanged(prev, next)` | 상태가 바뀔 때마다 (리셋 포함) | 이전·다음 `WaxBallState` |
-| `Crunched(strength)` | **Broken 상태에서** 주무를 때, grip 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 | 세기 0~1 (빠르게 주무를수록 큼) |
+| `Crunched(finger, strength)` | **Broken 상태에서** 손가락으로 주무를 때, 그 손가락의 세기 변화량이 `crunchGripStep`(기본 0.2)만큼 쌓일 때마다 | 손가락 번호 0~4, 세기 0~1 (빠르게 주무를수록 큼) |
 
-- C#: `event Action<WaxBallState, WaxBallState> StateChanged`, `event Action<float> Crunched`
-- Inspector: `UnityEvent<WaxBallState> onStateChanged`, `UnityEvent<float> onCrunched`
+- C#: `event Action<WaxBallState, WaxBallState> StateChanged`, `event Action<int, float> Crunched`
+- Inspector: `UnityEvent<WaxBallState> onStateChanged`, `UnityEvent<int, float> onCrunched`
+- `finger`는 `SetContact`에 넣은 손가락 번호와 같다. 그 손가락에만 진동을 주면 된다(손가락 번호와 실제 손가락의 대응은 입력 어댑터가 정한다).
 - `Crunched`는 Broken에서만 발생한다. Mixed가 된 뒤에는 발생하지 않는다.
 - 연속적인 값은 이벤트가 아니라 프로퍼티를 매 프레임 읽는다: `Grip`(0~1, 쥐는 정도), `MixProgress`(0~1, 섞임 진행도), `State`(현재 상태).
 
@@ -155,9 +156,9 @@ public class WaxBallHapticsAdapter : MonoBehaviour
         }
     }
 
-    private void OnCrunched(float strength)
+    private void OnCrunched(int finger, float strength)
     {
-        // strength 0~1: 손가락 끝 진동 세기와 바삭 소리 크기에 매핑한다.
+        // finger 0~4: 해당 손가락 끝에만 진동을 준다. strength 0~1: 진동 세기와 바삭 소리 크기에 매핑한다.
     }
 
     private void Update()
@@ -167,7 +168,10 @@ public class WaxBallHapticsAdapter : MonoBehaviour
     }
 }
 ```
-- 장갑 tracking으로 손가락 굽힘을 읽는다면, 그 값을 0~1 grip으로 바꿔 `stateMachine.SetGrip(grip)`에 넣는다(입력 어댑터).
+- 장갑 tracking이나 핸드트래킹으로 손가락을 읽는다면 입력 어댑터에서 `WaxBallContacts`(공 오브젝트에 있음)에 손가락마다 접촉점을 넣는다:
+  `contacts.SetContact(finger, 손가락 끝 월드 위치, 세기 0~1)`, 떨어지면 `contacts.ClearContact(finger)`.
+  전체 grip은 접촉점 세기를 합쳐서(기본 최댓값, Inspector에서 평균으로 변경 가능) `SetGrip`으로 들어가며, `Drive Grip`을 켜면 자동이다.
+  손가락별 정보 없이 grip 하나만 넣고 싶다면 `stateMachine.SetGrip(grip)`을 직접 부른다.
 - 에디터에서 장비 없이 테스트: Unity 담당의 `Dev_WaxBall` 씬에서 Slider로 grip을 올리며 이벤트를 확인한다(세부는 `Assets/Scripts/WaxBall/CLAUDE.md`).
 
 ---
