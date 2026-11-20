@@ -11,22 +11,22 @@ namespace Interaction
         [SerializeField] private TMP_Text label;
 
         private int crunchCount;
-        private int lastCrunchFinger = -1;
+        private string lastCrunchFinger = "-";
         private float lastCrunchStrength;
 
         private void OnEnable() => stateMachine.Crunched += HandleCrunched;
         private void OnDisable() => stateMachine.Crunched -= HandleCrunched;
 
-        private void HandleCrunched(int finger, float strength)
+        private void HandleCrunched(WaxFinger finger, float strength)
         {
             crunchCount++;
-            lastCrunchFinger = finger;
+            lastCrunchFinger = finger.ToString();
             lastCrunchStrength = strength;
         }
 
         private void Update()
         {
-            label.text = $"State: {stateMachine.State}\nGrip: {stateMachine.Grip:0.00}\nMix: {stateMachine.MixProgress:P0}\nCrunch: {crunchCount} (손가락 {lastCrunchFinger}, {lastCrunchStrength:0.00})";
+            label.text = $"State: {stateMachine.State}\nGrip: {stateMachine.Grip:0.00}\nMix: {stateMachine.MixProgress:P0}\nCrunch: {crunchCount} ({lastCrunchFinger}, {lastCrunchStrength:0.00})";
         }
     }
 }

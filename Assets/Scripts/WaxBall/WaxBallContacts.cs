@@ -19,7 +19,7 @@ namespace WaxBall
     }
 
     /// <summary>
-    /// 손가락 접촉점 입력(최대 5개). 장비와 무관하게 "공 표면 위 위치 + 누르는 세기(0~1)"만 받는다.
+    /// 손가락 접촉점 입력(엄지, 검지, 중지 3개). 장비와 무관하게 "공 표면 위 위치 + 누르는 세기(0~1)"만 받는다.
     /// Quest 핸드트래킹, WEART, 에디터의 가짜 손가락 어댑터가 모두 같은 함수를 부른다.
     /// 장비 SDK에 의존하지 않는다. 공 오브젝트(상태 머신이 있는 오브젝트)에 붙인다.
     /// </summary>
@@ -72,19 +72,20 @@ namespace WaxBall
         }
 
         /// <summary>월드 좌표의 접촉 위치. 표면 위가 아니어도 되고, 공 중심에서 본 방향으로 표면에 투영된다.</summary>
-        public void SetContact(int finger, Vector3 worldPosition, float pressure)
+        public void SetContact(WaxFinger finger, Vector3 worldPosition, float pressure)
         {
             SetContactLocal(finger, transform.InverseTransformPoint(worldPosition), pressure);
         }
 
         /// <summary>공 로컬 좌표의 접촉 위치.</summary>
-        public void SetContactLocal(int finger, Vector3 localPosition, float pressure)
+        public void SetContactLocal(WaxFinger finger, Vector3 localPosition, float pressure)
         {
-            if (finger < 0 || finger >= MaxContacts) return;
+            int i = (int)finger;
+            if (i < 0 || i >= MaxContacts) return;
             if (localPosition.sqrMagnitude < 1e-8f) return;
 
             pressure = Mathf.Clamp01(pressure);
-            contacts[finger] = new FingerContact
+            contacts[i] = new FingerContact
             {
                 active = true,
                 localDirection = localPosition.normalized,
@@ -95,23 +96,25 @@ namespace WaxBall
         }
 
         /// <summary>손가락이 떨어졌을 때(추적을 잃었을 때 포함) 부른다.</summary>
-        public void ClearContact(int finger)
+        public void ClearContact(WaxFinger finger)
         {
-            if (finger < 0 || finger >= MaxContacts || !contacts[finger].active) return;
-            contacts[finger] = default;
+            int i = (int)finger;
+            if (i < 0 || i >= MaxContacts || !contacts[i].active) return;
+            contacts[i] = default;
             if (stateMachine != null) stateMachine.ReleaseFinger(finger);
         }
 
         public void ClearAllContacts()
         {
-            for (int i = 0; i < MaxContacts; i++) ClearContact(i);
+            for (int i = 0; i < MaxContacts; i++) ClearContact((WaxFinger)i);
         }
 
-        public bool TryGetContact(int finger, out FingerContact contact)
+        public bool TryGetContact(WaxFinger finger, out FingerContact contact)
         {
             contact = default;
-            if (finger < 0 || finger >= MaxContacts) return false;
-            contact = contacts[finger];
+            int i = (int)finger;
+            if (i < 0 || i >= MaxContacts) return false;
+            contact = contacts[i];
             return contact.active;
         }
 

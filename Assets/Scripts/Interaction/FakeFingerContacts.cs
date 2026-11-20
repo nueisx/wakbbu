@@ -7,7 +7,7 @@ using UnityEditor;
 namespace Interaction
 {
     /// <summary>
-    /// 에디터 테스트용 가짜 손가락 접촉점 5개. 공 주변의 FakeFinger 오브젝트를 Scene 뷰에서 드래그해 위치를 옮긴다.
+    /// 에디터 테스트용 가짜 손가락 접촉점 3개(엄지, 검지, 중지). 공 주변의 FakeFinger 오브젝트를 Scene 뷰에서 드래그해 위치를 옮긴다.
     /// 세기는 상태 머신의 grip(Slider 값)을 그대로 쓴다. 실제 입력은 이 컴포넌트 대신 같은 API(WaxBallContacts)를 부르면 된다.
     /// </summary>
     public class FakeFingerContacts : MonoBehaviour
@@ -16,9 +16,9 @@ namespace Interaction
         [SerializeField] private WaxBallStateMachine stateMachine;
         [SerializeField] private Transform[] fingers = new Transform[WaxBallContacts.MaxContacts];
         [Tooltip("끄면 그 손가락은 접촉하지 않는 것으로 친다.")]
-        [SerializeField] private bool[] fingerEnabled = { true, true, true, true, true };
+        [SerializeField] private bool[] fingerEnabled = { true, true, true };
         [Tooltip("손가락별 세기 배율. 기본은 모두 1(Slider 값 그대로).")]
-        [SerializeField] private float[] pressureScale = { 1f, 1f, 1f, 1f, 1f };
+        [SerializeField] private float[] pressureScale = { 1f, 1f, 1f };
         [SerializeField] private bool showMarkersInGame;
 
         private void Awake()
@@ -41,12 +41,12 @@ namespace Interaction
                 bool enabledFinger = fingers[i] != null && i < fingerEnabled.Length && fingerEnabled[i];
                 if (!enabledFinger)
                 {
-                    contacts.ClearContact(i);
+                    contacts.ClearContact((WaxFinger)i);
                     continue;
                 }
 
                 float scale = i < pressureScale.Length ? pressureScale[i] : 1f;
-                contacts.SetContact(i, fingers[i].position, stateMachine.Grip * scale);
+                contacts.SetContact((WaxFinger)i, fingers[i].position, stateMachine.Grip * scale);
             }
         }
 
@@ -71,7 +71,7 @@ namespace Interaction
                 Gizmos.DrawWireSphere(fingers[i].position, radius * 0.18f);
                 Gizmos.DrawSphere(surface, radius * 0.08f);
 #if UNITY_EDITOR
-                Handles.Label(fingers[i].position + Vector3.up * radius * 0.25f, i.ToString());
+                Handles.Label(fingers[i].position + Vector3.up * radius * 0.25f, ((WaxFinger)i).ToString());
 #endif
             }
         }

@@ -16,9 +16,9 @@ namespace WaxBall
     [Serializable]
     public class WaxBallStateEvent : UnityEvent<WaxBallState> { }
 
-    /// <summary>인자: 손가락 번호(0~4), 세기(0~1).</summary>
+    /// <summary>인자: 손가락, 세기(0~1).</summary>
     [Serializable]
-    public class WaxBallCrunchEvent : UnityEvent<int, float> { }
+    public class WaxBallCrunchEvent : UnityEvent<WaxFinger, float> { }
 
     /// <summary>
     /// 왁뿌볼 상태 판정의 유일한 장소. 상태는 공 전체 기준이고, 입력은 SetGrip(0~1)로 받는다.
@@ -27,7 +27,7 @@ namespace WaxBall
     /// </summary>
     public class WaxBallStateMachine : MonoBehaviour
     {
-        public const int FingerCount = 5;
+        public const int FingerCount = 3;
 
         [Header("임계값 (Interaction 담당이 튜닝)")]
         [SerializeField, Range(0f, 1f)] private float pressThreshold = 0.15f;
@@ -50,10 +50,10 @@ namespace WaxBall
         public event Action<WaxBallState, WaxBallState> StateChanged;
 
         /// <summary>
-        /// Broken 상태에서 손가락으로 주무를 때마다 발생한다. 인자는 손가락 번호(0~4)와 세기(0~1).
+        /// Broken 상태에서 손가락으로 주무를 때마다 발생한다. 인자는 손가락(WaxFinger)과 세기(0~1).
         /// 해당 손가락에만 진동을 주고 바삭 소리를 내는 용도.
         /// </summary>
-        public event Action<int, float> Crunched;
+        public event Action<WaxFinger, float> Crunched;
 
         private readonly float[] fingerPressure = new float[FingerCount];
         private readonly float[] fingerTime = new float[FingerCount];
@@ -89,41 +89,43 @@ namespace WaxBall
         /// 손가락 하나의 세기(0~1)를 알린다. Broken 상태에서 세기가 변하면 그 손가락에 Crunched가 발생한다.
         /// 상태 판정에는 쓰이지 않는다(상태는 SetGrip 기준).
         /// </summary>
-        public void SetFingerPressure(int finger, float pressure)
+        public void SetFingerPressure(WaxFinger finger, float pressure)
         {
-            if (finger < 0 || finger >= FingerCount) return;
+            int i = (int)finger;
+            if (i < 0 || i >= FingerCount) return;
             pressure = Mathf.Clamp01(pressure);
 
-            float delta = Mathf.Abs(pressure - fingerPressure[finger]);
-            float elapsed = Mathf.Min(Time.time - fingerTime[finger], 0.1f);
-            if (elapsed > 1e-4f) fingerSpeed[finger] = delta / elapsed;
+            float delta = Mathf.Abs(pressure - fingerPressure[i]);
+            float elapsed = Mathf.Min(Time.time - fingerTime[i], 0.1f);
+            if (elapsed > 1e-4f) fingerSpeed[i] = delta / elapsed;
 
-            fingerPressure[finger] = pressure;
-            fingerTime[finger] = Time.time;
+            fingerPressure[i] = pressure;
+            fingerTime[i] = Time.time;
 
             // Broken에 막 진입한 순간의 변화는 세지 않는다.
-            if (fingerSkipDelta[finger])
+            if (fingerSkipDelta[i])
             {
-                fingerSkipDelta[finger] = false;
+                fingerSkipDelta[i] = false;
                 return;
             }
 
             if (State != WaxBallState.Broken) return;
 
-            fingerCrunchAccumulated[finger] += delta;
-            if (fingerCrunchAccumulated[finger] >= crunchGripStep)
+            fingerCrunchAccumulated[i] += delta;
+            if (fingerCrunchAccumulated[i] >= crunchGripStep)
             {
-                fingerCrunchAccumulated[finger] %= crunchGripStep;
+                fingerCrunchAccumulated[i] %= crunchGripStep;
                 RaiseCrunched(finger);
             }
         }
 
         /// <summary>손가락이 떨어졌을 때(추적을 잃었을 때 포함) 부른다. Crunched 없이 기준 세기만 0으로 돌린다.</summary>
-        public void ReleaseFinger(int finger)
+        public void ReleaseFinger(WaxFinger finger)
         {
-            if (finger < 0 || finger >= FingerCount) return;
-            fingerPressure[finger] = 0f;
-            fingerSpeed[finger] = 0f;
+            int i = (int)finger;
+            if (i < 0 || i >= FingerCount) return;
+            fingerPressure[i] = 0f;
+            fingerSpeed[i] = 0f;
         }
 
         /// <summary>어느 상태에서든 호출 가능, 횟수 제한 없음.</summary>
@@ -167,9 +169,9 @@ namespace WaxBall
             }
         }
 
-        private void RaiseCrunched(int finger)
+        private void RaiseCrunched(WaxFinger finger)
         {
-            float strength = Mathf.Lerp(crunchMinStrength, 1f, Mathf.Clamp01(fingerSpeed[finger] / crunchFullSpeed));
+            float strength = Mathf.Lerp(crunchMinStrength, 1f, Mathf.Clamp01(fingerSpeed[(int)finger] / crunchFullSpeed));
             Crunched?.Invoke(finger, strength);
             onCrunched.Invoke(finger, strength);
         }

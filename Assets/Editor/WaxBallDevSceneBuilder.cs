@@ -11,14 +11,13 @@ public static class WaxBallDevSceneBuilder
     private const float BallDiameter = 0.07f;
     private const float CameraDistance = 0.35f;
 
-    // 가짜 손가락 5개의 기본 위치: 카메라 쪽(-z) 공 표면 위, 엄지부터 새끼손가락 순서로 넓게 배치한다.
+    // 가짜 손가락 3개의 기본 위치(공 중심에서 본 방향). 세 손가락으로 공을 집듯이 쥔 모양이다:
+    // 엄지(Thumb)는 왼쪽, 검지(Index)와 중지(Middle)는 반대편(오른쪽)에서 위아래로 나란히 누른다.
     private static readonly Vector3[] FingerDirections =
     {
-        new Vector3(-0.85f, -0.25f, -0.6f),
-        new Vector3(-0.35f, 0.65f, -0.7f),
-        new Vector3(0.15f, 0.85f, -0.55f),
-        new Vector3(0.6f, 0.55f, -0.65f),
-        new Vector3(0.85f, 0.05f, -0.6f),
+        new Vector3(-0.95f, -0.1f, -0.3f),
+        new Vector3(0.8f, 0.4f, -0.45f),
+        new Vector3(0.8f, -0.2f, -0.55f),
     };
 
     [MenuItem("WaxBall/Create Dev Test Objects")]
@@ -99,7 +98,7 @@ public static class WaxBallDevSceneBuilder
         Selection.activeGameObject = ball;
     }
 
-    // 공 주변에 가짜 손가락 5개를 만든다. Scene 뷰에서 Move 도구로 드래그해 접촉 위치를 옮긴다.
+    // 공 주변에 가짜 손가락 3개를 만든다. Scene 뷰에서 Move 도구로 드래그해 접촉 위치를 옮긴다.
     // 공의 자식으로 두지 않는다(공은 grip에 따라 찌그러지므로 자식도 같이 변형된다).
     private static void CreateFakeFingers(Transform ball, WaxBallContacts contacts, WaxBallStateMachine machine)
     {
@@ -116,7 +115,7 @@ public static class WaxBallDevSceneBuilder
         for (int i = 0; i < FingerDirections.Length; i++)
         {
             var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            marker.name = "FakeFinger" + i;
+            marker.name = "Fake" + (WaxFinger)i;
             Object.DestroyImmediate(marker.GetComponent<Collider>());
             marker.transform.SetParent(root.transform, false);
             marker.transform.localScale = Vector3.one * radius * 0.3f;
