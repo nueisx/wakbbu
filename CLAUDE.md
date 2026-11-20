@@ -93,7 +93,7 @@
 | `Mixed` | 왁스 조각이 점토와 섞임 | Broken 이후 grip 변화량 누적 ≥ 4.5 (완전히 쥐었다 폈다 1회 ≈ 2.0, 약 2.25회) | 유지 (리셋으로만 복귀) |
 
 - grip이 한 번에 크게 뛰어도 상태 이벤트는 **건너뛰지 않고 한 단계씩** 순서대로 발생한다(예: Idle → Pressed → Cracked → Broken).
-- 임계값은 `WaxBallStateMachine`의 `[SerializeField]` 값이고, Interaction 담당이 정한다(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`).
+- 임계값은 튜닝 설정 파일 `Assets/Settings/WaxBallTuning.asset`에 있고(상태 머신이 참조), Interaction 담당이 정한다(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`).
 
 **리셋 / 재생성**
 - `ResetBall()`은 **어느 상태에서든** 호출할 수 있고, 횟수 제한이 없다. 호출하면 grip, 섞임 누적값, 시각 효과를 초기화하고 `Idle`로 돌아간다.

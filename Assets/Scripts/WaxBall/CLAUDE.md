@@ -9,6 +9,8 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 
 | 파일 | 역할 |
 |---|---|
+| `WaxBall/WaxBallTuning.cs` | **튜닝 값 설정 파일**(ScriptableObject). 상태 임계값, 파손 범위·속도, 섞임, 쪼개짐, Crunch 기준, 깨지는 시간을 한곳에 모음. 값은 `Assets/Settings/WaxBallTuning.asset` |
+| `Assets/Editor/WaxBallTuningTools.cs` | 메뉴 `WaxBall > Apply Tuning To Open Scene`: 설정 파일을 만들고 열린 씬의 컴포넌트에 연결 |
 | `WaxBall/WaxBallStateMachine.cs` | 상태 판정의 유일한 장소(공 전체 기준). `SetGrip()`, `SetFingerPressure()`, `ResetBall()`, `StateChanged`, `Crunched(finger, strength)`, `Grip`, `MixProgress` |
 | `WaxBall/WaxFinger.cs` | `enum WaxFinger { Thumb, Index, Middle }` (WEART TouchDIVER G1이 지원하는 세 손가락) |
 | `WaxBall/WaxBallContacts.cs` | 손가락 접촉점 입력 API(세 손가락, 위치 + 세기). 장비 의존 없음. 전체 grip 합치기(최댓값/평균) |
@@ -32,7 +34,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 
 ## 2. 상태 머신 구현 세부
 
-- 임계값(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix`)은 하드코딩하지 않고 `[SerializeField]`로 노출한다. 값은 Interaction 담당이 정한다.
+- 임계값(`pressThreshold`, `crackThreshold`, `breakThreshold`, `kneadAmountToMix` 등)은 하드코딩하지 않고 **튜닝 설정 파일**(아래 "튜닝 값 규칙")에 둔다. 값은 Interaction 담당이 정한다.
 - `SetGrip()`은 grip을 0~1로 clamp하고, 한 번에 큰 값이 들어와도 **중간 상태 이벤트를 빠뜨리지 않도록 한 단계씩** 진행한다.
 - Broken 이후에는 grip 변화량을 `KneadAccumulated`에 누적하고, 접촉점이 없는 씬의 `MixProgress = KneadAccumulated / kneadAmountToMix`(0~1)이다. 접촉점 씬은 깨진 면적과 흔적별 평균 섞임으로 판정한다(`mixAreaThreshold`, `mixAverageThreshold`, 3장).
 - **Crunched(WaxFinger finger, float strength)**: Broken 상태에서 **손가락별로** 세기(`SetFingerPressure`) 변화량이 `crunchGripStep`(기본 0.5, 한 번 쥐었다 펴면 손가락마다 3~5번)만큼 쌓일 때마다 그 손가락에 한 번 발생한다. WEART로 해당 손가락에만 진동을 주는 용도다.
@@ -43,6 +45,16 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 - `ResetBall()`은 grip, 섞임 누적값, Crunched 누적값을 0으로 돌리고 `Idle`로 바꾼다. 어느 상태에서든, 횟수 제한 없이 호출할 수 있다.
 - 런타임에 생성한 오브젝트가 생기면 리셋 시 반드시 정리한다(무한 반복해도 메모리가 누적되지 않게). 현재는 런타임 생성 오브젝트가 없다.
 - 이 폴더의 코드는 `WaxBall` 네임스페이스를 쓴다.
+
+---
+
+### 튜닝 값 규칙 (`WaxBallTuning.asset`)
+
+- 튜닝 값(상태 임계값, 파손 반경·속도, 섞임, 쪼개짐, Crunch 기준, 깨지는 시간, 찌그러짐 등)은 **`Assets/Settings/WaxBallTuning.asset` 한 파일**에만 있다. `WaxBallStateMachine`, `WaxBallDamage`, `WaxBallShellVisual`은 이 파일을 `Tuning` 칸으로 참조하고, dev 씬과 Quest 씬이 같은 파일을 쓴다.
+- **앞으로 값을 바꿀 때는 이 파일만 고친다**(Project 창에서 파일을 눌러 Inspector에서 수정). 컴포넌트나 씬에는 튜닝 값이 저장되지 않으므로 씬마다 값이 어긋나거나, Reload 후 옛날 값으로 Play되는 일이 없다.
+- 새 튜닝 값을 만들 때는 컴포넌트에 `[SerializeField]`로 두지 말고 `WaxBallTuning`에 필드를 추가하고(`Tooltip`, `Range` 포함), 컴포넌트에서는 `Tuning.필드`로 읽는다. 기본값은 필드 초기값이다.
+- `Tuning` 칸이 비어 있으면 코드 기본값(`WaxBallTuning.Default`)을 쓴다. 씬에 연결하려면 씬을 열고 메뉴 `WaxBall > Apply Tuning To Open Scene`을 한 번 실행한 뒤 저장한다(두 씬 빌더도 자동으로 연결한다).
+- 씬마다 다를 수밖에 없는 값(균열 시작 방향 `randomStartForward` 등 공 위치·방향에 묶인 것, 접촉 합치기 방식 `WaxBallContacts`)은 컴포넌트에 남긴다.
 
 ---
 
@@ -204,5 +216,6 @@ Mixed 구현: 작은 판(Voronoi 셀)마다 무작위 값을 둔다. 셀의 `Pie
 - 스크립트 파일이나 클래스 이름을 바꾸지 말 것(.meta GUID와 씬 참조가 끊긴다). 꼭 바꿔야 하면 먼저 확인받는다.
 - `.meta` 파일을 지우거나 새로 만들지 말 것.
 - 셰이더 속성 이름을 바꾸면 `WaxBallShellVisual`과 머티리얼의 저장된 값이 어긋난다. 함께 고친다.
+- 튜닝 값은 `WaxBallTuning.asset`에만 둔다(2장 "튜닝 값 규칙"). 컴포넌트에 새 튜닝 값을 `[SerializeField]`로 만들지 않는다.
 - 환경 반사, 파편 오브젝트, 파티클은 넣지 않는다(3장 이유 참고).
 - 새 셰이더에는 스테레오 인스턴싱 매크로(`UNITY_VERTEX_INPUT_INSTANCE_ID`, `UNITY_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_INSTANCE_ID`, `UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX`)를 반드시 넣는다. Quest는 Multiview를 쓴다.

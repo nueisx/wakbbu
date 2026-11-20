@@ -1013,15 +1013,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stateMachine: {fileID: 1246623706}
   contacts: {fileID: 1246623705}
-  damagePressureThreshold: 0.3
-  minRadiusDegrees: 20
-  maxRadiusDegrees: 55
-  pressureDamageRate: 0.03
-  kneadDamageGain: 0.4
-  kneadAmountPerStamp: 13.5
-  spreadDegreesPerKnead: 2
-  maxSpreadDegrees: 10
-  rebindAngleDegrees: 25
   crack1Stamp: -1
   crack2Stamp: -1
 --- !u!114 &1246623705
@@ -1051,15 +1042,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93b55df814ef74557a0fe29e621deb84, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  pressThreshold: 0.15
-  crackThreshold: 0.55
-  breakThreshold: 0.85
-  kneadAmountToMix: 4.5
-  mixAreaThreshold: 0.8
-  crunchGripStep: 0.5
-  crunchMinInterval: 0.1
-  crunchMinStrength: 0.2
-  crunchFullSpeed: 2
   onStateChanged:
     m_PersistentCalls:
       m_Calls: []
@@ -1079,13 +1061,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   stateMachine: {fileID: 1246623706}
-  maxSquash: 0.25
-  brokenSquash: 0.45
-  minCrackAmount: 0.15
-  brokenRampDuration: 0.6
-  fragmentSpeed: 0.5
-  dentStrength: 0.5
-  dentFollowSpeed: 12
   randomStartForward: {x: 0, y: 0, z: -1}
   randomStartConeAngle: 70
   minStartSeparation: 35
