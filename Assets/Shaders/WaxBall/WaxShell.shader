@@ -38,7 +38,8 @@ Shader "WaxBall/WaxShell"
         _Fragment("Fragment (판이 쪼개진 정도)", Range(0, 1)) = 0
         _PlateScale("Plate Scale (큰 판)", Range(1, 6)) = 1.6
         _FineScaleMul("Fine Scale Multiplier (작은 판)", Range(1.5, 4)) = 2.2
-        _PlateGapWidth("Plate Gap Width (틈 전체 폭, 구 반지름 기준)", Range(0.02, 0.4)) = 0.2
+        _PlateGapWidth("Plate Gap Width (가장 넓을 때 틈 전체 폭, 구 반지름 기준)", Range(0.02, 0.4)) = 0.2
+        _PlateGapWidthMin("Plate Gap Width Min (갓 깨졌을 때 틈 전체 폭. 주무를수록 위 값까지 넓어짐)", Range(0.005, 0.2)) = 0.05
         _DentDir("Dent Direction (오브젝트 공간)", Vector) = (0, 0, -1, 0)
         _DentAmount("Dent Amount", Range(0, 1)) = 0
 
@@ -95,6 +96,7 @@ Shader "WaxBall/WaxShell"
                 float _PlateScale;
                 float _FineScaleMul;
                 float _PlateGapWidth;
+                float _PlateGapWidthMin;
                 float4 _DentDir;
                 float _DentAmount;
                 float _LocalDamage;
@@ -278,8 +280,12 @@ Shader "WaxBall/WaxShell"
                 float d = dBase + (Noise3(q * 9.0 + seed) - 0.5) * 0.03;
 
                 float widthVariation = lerp(0.5, 1.5, Noise3(q * 4.0 + seed * 1.7));
-                float wBase = _PlateGapWidth * 0.5 * widthScale * gate * widthVariation;
-                float w = wBase * (1.0 - mix * lerp(0.85, 1.0, isFine));
+                // 갓 깨진 판은 크기 그대로 틈만 가늘고(_PlateGapWidthMin), 주무를수록(mix 0.4까지) 틈이 넓어진다.
+                // 섞임이 절반을 넘으면 틈이 다시 가늘어져 남은 조각을 자르지 않는다.
+                float grow = lerp(_PlateGapWidthMin / _PlateGapWidth, 1.0, saturate(mix * 2.5));
+                float shrink = 1.0 - smoothstep(0.5, 1.0, mix) * lerp(0.85, 1.0, isFine);
+                float wBase = _PlateGapWidth * 0.5 * widthScale * gate * widthVariation * grow;
+                float w = wBase * shrink;
                 float wMix = 0.0;
 
                 if (isFine > 0.5)

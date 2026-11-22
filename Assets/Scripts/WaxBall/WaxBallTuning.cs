@@ -108,10 +108,10 @@ namespace WaxBall
         [Min(0.01f)] public float fragmentSpeed = 0.5f;
 
         [Tooltip("Broken에 막 들어갔을 때 이미 쪼개져 있는 정도(0~1).")]
-        [Range(0f, 1f)] public float fragmentBase = 0.2f;
+        [Range(0f, 1f)] public float fragmentBase = 0f;
 
         [Tooltip("쥐는 힘(grip)이 쪼개짐에 주는 비중. 작을수록 트리거를 조금 움직여서는 쪼개지지 않는다.")]
-        [Range(0f, 1f)] public float fragmentGripWeight = 0.1f;
+        [Range(0f, 1f)] public float fragmentGripWeight = 0.05f;
 
         [Tooltip("주무른 양(MixProgress, 접촉점 씬은 흔적마다 주무른 양)이 쪼개짐에 주는 비중. 클수록 여러 번 주물러야 점점 잘게 깨진다.")]
         [Range(0f, 1f)] public float fragmentKneadWeight = 0.7f;

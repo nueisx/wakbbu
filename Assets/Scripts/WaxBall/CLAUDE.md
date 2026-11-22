@@ -114,7 +114,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 | `_CrackAmounts` | 균열 두 줄의 진행도(x: 첫 번째, y: 두 번째, 0~1). Cracked에서 grip에 따라 커지고, 한 번 간 값은 되돌아가지 않음(리셋에서만 0). 손가락에 붙지 않은 균열은 0 |
 | `_LocalDamage`, `_Stamps[8]` | 접촉점을 쓰는 씬이면 1. 파손 흔적 8개(방향 xyz, 반경의 코사인). 빈 칸은 코사인 2 |
 | `_BrokenAmount` | 파열 정도(0~1). Broken 진입 시 `brokenRampDuration`(기본 0.6초) 동안 1로 올라가며 큰 판으로 갈라짐. 시각 효과만 늦추고 `StateChanged`와 햅틱 이벤트는 즉시 발생 |
-| `_Fragment` | 판이 쪼개진 정도(0~1). `fragmentBase` + `fragmentGripWeight` × grip + `fragmentKneadWeight` × `MixProgress`를 목표로 `fragmentSpeed`(기본 0.5/초)로 따라가고 줄지 않음. 주무른 양이 대부분을 좌우하므로 여러 번 주물러야 점점 잘게 깨진다 |
+| `_Fragment` | 판이 쪼개진 정도(0~1). `fragmentBase`(0) + `fragmentGripWeight`(0.05) × grip + `fragmentKneadWeight` × `MixProgress`(접촉점 씬은 셰이더가 판마다 섞임으로 더함)를 목표로 `fragmentSpeed`(기본 0.5/초)로 따라가고 줄지 않음. 주무른 양이 대부분을 좌우하므로 여러 번 주물러야 점점 잘게 깨진다 |
 | `_MixAmount` | `MixProgress`(0~1). 접촉점이 없는 씬에서 판 줄어듦을 정한다(전체 주무른 양). Mixed 진입 시 1이 되므로 Mixed 상태는 mixed-02 모습(작은 초록 조각이 군데군데 남음)이다 |
 | `_StampMix[8]`, `_MixFill`, `_FragmentKnead` | 접촉점 씬에서: 흔적마다 섞임(0~1), Mixed 직전 남은 부분 채움 정도, 주무른 양이 쪼개짐에 더하는 비중(`fragmentKneadWeight`) |
 | `_DentDir`, `_DentAmount` | 둥글게 들어가는 방향(오브젝트 공간)과 정도. 정도는 Broken 이후 grip을 부드럽게 따라간다 |
@@ -128,7 +128,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 
 Mixed 구현: 작은 판(Voronoi 셀)마다 무작위 값을 둔다. 셀의 `Piece Fraction`(기본 0.45)만 **남는 판**이고, 이 판은 `Piece Inset`(기본 0.03)만큼 가장자리가 줄어든 작은 조각이 된다. 나머지 판은 `MixProgress`에 따라 셀마다 다른 시점(약 0.3~0.95)에 점토에 묻혀 사라진다. 큰 판 사이 틈은 섞일수록 가늘어져서 남은 조각을 자르지 않는다. 조각이 차지하는 면적은 대략 `Piece Fraction` × (줄어든 판의 면적 비율)로 약 20%를 목표로 한다. 판이 줄어든 자리는 기존 틈 처리(흰 점토, 밝은 테두리, 1px 보정)를 그대로 쓴다.
 
-셰이더 튜닝 값(수치는 눈으로 보고 조정): `Crack Length`, `Gap Width`, `Plate Scale`, `Fine Scale Multiplier`, `Plate Gap Width`, `Piece Fraction`(남는 조각 수), `Piece Inset`(조각 크기, 클수록 작음), `Clay Bulge`, `Rim Width`, `Rim Brightness`, 케이스 표현(`Fresnel Power`, `Fresnel Strength`, `Casing Edge`).
+셰이더 튜닝 값(수치는 눈으로 보고 조정): `Crack Length`, `Gap Width`, `Plate Scale`, `Fine Scale Multiplier`, `Plate Gap Width`(가장 넓을 때, 0.2), `Plate Gap Width Min`(갓 깨졌을 때, 0.05 — 틈은 판의 섞임 0.4까지 이 값에서 위 값으로 넓어진다), `Clay Shade`, `Piece Fraction`(남는 조각 수), `Piece Inset`(조각 크기, 클수록 작음), `Clay Bulge`, `Rim Width`, `Rim Brightness`, 케이스 표현(`Fresnel Power`, `Fresnel Strength`, `Casing Edge`).
 
 ---
 

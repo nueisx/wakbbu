@@ -36,8 +36,8 @@ MonoBehaviour:
   minCrackAmount: 0.15
   brokenRampDuration: 0.6
   fragmentSpeed: 0.5
-  fragmentBase: 0.2
-  fragmentGripWeight: 0.1
+  fragmentBase: 0
+  fragmentGripWeight: 0.05
   fragmentKneadWeight: 0.7
   mixFillStart: 0.85
   dentStrength: 0.5
