@@ -21,6 +21,7 @@ Shader "WaxBall/WaxShell"
     {
         _ShellColor("Shell Color (왁스 껍질)", Color) = (0.55, 0.8, 0.15, 1)
         _ClayColor("Clay Color (점토)", Color) = (0.98, 0.98, 0.96, 1)
+        _ClayShade("Clay Shade (점토 가장 어두운 곳의 색. 누렇거나 회색이 되지 않는 연한 청백색)", Color) = (0.84, 0.86, 0.93, 1)
 
         [Header(Crack)]
         _CrackAmounts("Crack Amounts (x: 첫 번째 균열, y: 두 번째 균열)", Vector) = (0, 0, 0, 0)
@@ -80,6 +81,7 @@ Shader "WaxBall/WaxShell"
             CBUFFER_START(UnityPerMaterial)
                 half4 _ShellColor;
                 half4 _ClayColor;
+                half4 _ClayShade;
                 float4 _CrackAmounts;
                 float _CrackLength;
                 float _GapWidth;
@@ -132,6 +134,7 @@ Shader "WaxBall/WaxShell"
             struct Gap
             {
                 float cover;     // 흰 점토가 보이는 정도
+                float cavity;    // 틈 안쪽 판 가장자리 근처의 그늘 정도(틈 가운데 0, 판 가장자리 1)
                 float rim;       // 판 가장자리 밝은 테두리 정도
                 float3 shift;    // 점토가 불룩해 보이도록 법선을 기울이는 방향(오브젝트 공간)
             };
@@ -215,6 +218,7 @@ Shader "WaxBall/WaxShell"
                 Gap gap;
                 gap.cover = (1.0 - smoothstep(w - px * 0.5, w + px * 0.5, d)) * inside;
                 gap.rim = (1.0 - smoothstep(w, w + rimW + px, d)) * inside * (1.0 - gap.cover);
+                gap.cavity = saturate((d / max(w, 1e-4) - 0.35) / 0.65) * gap.cover;
                 gap.shift = dirAway * saturate(d / max(w, 1e-4)) * gap.cover;
                 return gap;
             }
@@ -362,6 +366,7 @@ Shader "WaxBall/WaxShell"
                 Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0, mask, localMix);
 
                 float cover = max(max(crack1.cover, crack2.cover), max(plate0.cover, plate1.cover));
+                float cavity = max(max(crack1.cavity, crack2.cavity), max(plate0.cavity, plate1.cavity));
                 float rim = max(max(crack1.rim, crack2.rim), max(plate0.rim, plate1.rim));
                 float3 shift = crack1.shift + crack2.shift + plate0.shift + plate1.shift;
 
@@ -384,7 +389,11 @@ Shader "WaxBall/WaxShell"
                 half3 diffuse = mainLight.color * saturate(dot(normal, mainLight.direction)) * 0.8
                               + SampleSH(normal);
                 half wrap = dot(normal, mainLight.direction) * 0.5 + 0.5;
-                half3 softDiffuse = half3(1, 1, 1) * lerp(0.9, 1.0, wrap);
+                // 점토: 광원 색과 무관하게 부드러운 반구 음영(위쪽이 밝고 아래쪽이 연한 청백색). 틈 안쪽 판 가장자리 근처는 살짝 어둡다.
+                // 가장 어두운 곳도 _ClayShade(약 85~90% 밝기의 연한 청백색)라 회색이나 누런색이 되지 않는다. 하이라이트는 넣지 않는다.
+                half clayLight = saturate(wrap * 0.65 + (normal.y * 0.5 + 0.5) * 0.35);
+                half3 softDiffuse = lerp(_ClayShade.rgb, half3(1, 1, 1), smoothstep(0.15, 0.9, clayLight));
+                softDiffuse = lerp(softDiffuse, _ClayShade.rgb, cavity * 0.6);
                 diffuse = lerp(diffuse, softDiffuse, cover);
 
                 // 가장자리: 고무 두께가 비치는 밝고 투명한 테두리와 가는 가장자리 선(하이라이트는 없다)
