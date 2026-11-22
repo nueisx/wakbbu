@@ -7,6 +7,7 @@
 //   MixProgress가 커질수록 공 전체로 퍼진다. 접촉점을 쓰지 않으면 공 전체가 깨진다.
 // - Broken(_BrokenAmount, _Fragment): 큰 판 몇 개로 갈라지고 틈은 흰 점토 색이다.
 //   _Fragment가 커질수록 큰 판 안에 작은 판 경계가 하나씩 생겨 더 잘게 쪼개진다.
+//   파손은 판(Voronoi 셀) 단위다. 셀 중심에서 파손 영향을 한 번만 계산해 판이 통째로 깨지거나 멀쩡하고, 경계는 항상 판 테두리를 따른다.
 // - Mixed(_MixAmount = MixProgress): 작은 판 중 일부(_PieceFraction)만 가장자리가 줄어든 작은 조각으로 남고 나머지는 점토에 묻힌다.
 //   흰색이 표면 대부분을 덮고(mixed), 끝에는 표면의 약 20%에 작고 납작한 초록 조각이 군데군데 남는다(mixed-02).
 //   점토는 고무에 눌려 매끈하고, 실루엣과 표면에 노이즈 요철은 없다. grip에 따라 손가락 쪽만 둥글게 들어간다(_DentDir).
@@ -146,6 +147,9 @@ Shader "WaxBall/WaxShell"
                 float cellHash;  // 가장 가까운 셀의 무작위 값(Mixed에서 어떤 판이 남는지 정한다)
                 float cellHash2; // 두 번째 무작위 값(조각 크기, 사라지는 시점)
                 float3 grad;     // 셀1 → 셀2 방향
+                float3 site1;    // 가장 가까운 셀의 중심(스케일된 공간). 방향만 쓰면 파손 영향을 셀 단위로 계산할 수 있다.
+                float3 site2;    // 두 번째로 가까운 셀(경계 건너편)의 중심
+                float cellHashB; // 두 번째 셀의 무작위 값(cellHash와 같은 식)
             };
 
             float Hash1(float3 p)
@@ -206,6 +210,10 @@ Shader "WaxBall/WaxShell"
                 result.cellHash = Hash1(id1 * 1.37 + 11.1);
                 result.cellHash2 = Hash1(id1 * 2.71 + 5.3);
                 result.grad = normalize(v2 - v1 + 1e-5);
+                // diff = id + 무작위 오프셋 - local 이므로 셀 중심 = p + diff
+                result.site1 = p + v1;
+                result.site2 = p + v2;
+                result.cellHashB = Hash1(id2 * 1.37 + 11.1);
                 return result;
             }
 
@@ -260,13 +268,10 @@ Shader "WaxBall/WaxShell"
             // 판 사이 틈(Voronoi 경계). gate: 이 경계가 얼마나 나타났는지(0~1), 클수록 넓다.
             // isFine: 작은 판 층이면 1. Mixed에서 작은 판 중 일부(_PieceFraction)만 작은 조각으로 남고 나머지는 점토에 묻혀 사라진다.
             // 큰 판 층(isFine = 0)의 틈은 섞일수록 가늘어져서 남은 조각을 자르지 않는다.
-            // mix: 이 자리의 섞임 정도(0~1). 접촉점을 쓰면 흔적마다 주무른 양을 따르고, 아니면 전체 값(_MixAmount)이다.
-            // mask: 파손 흔적 주변 정도(0~1). 경계마다 나타나는 반경이 달라서 파손 범위가 경계를 따라 하나씩 번져 나간다.
-            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine, float mask, float mix)
+            // cellGate: 이 픽셀이 속한 판이 깨진 정도(0~1). 판 단위로 정해진다.
+            // mix: 이 판의 섞임 정도(0~1). 접촉점을 쓰면 흔적마다 주무른 양을 따르고, 아니면 전체 값(_MixAmount)이다.
+            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine, float cellGate, float mix)
             {
-                gate *= saturate((mask * 1.2 - v.lineHash * 0.85) * 6.0);
-                float cellGate = saturate((mask * 1.2 - v.cellHash * 0.85) * 6.0);
-
                 // 셀 단위 거리를 구 반지름 단위 거리로 바꾼다(경계까지 거리 ≈ edge의 절반).
                 float dBase = 0.5 * v.edge / scale;
                 float px = fwidth(dBase);
@@ -293,30 +298,38 @@ Shader "WaxBall/WaxShell"
                 return MakeGap(d, px, w, inside, rimW, normalize(away + 1e-5));
             }
 
-            // 파손 흔적 주변이 얼마나 깨졌는지(0~1). 흔적은 (방향 xyz, 반경의 코사인)이고 빈 칸은 코사인이 2다.
-            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 공 전체가 깨지고 섞임은 _MixAmount 하나다.
-            // 접촉점을 쓰면 localMix는 흔적마다 주무른 양을 따르고, _MixFill이 커지면 남은 부분도 채운다.
-            float DamageMask(float3 q, out float localMix)
+            // 셀 중심(site) 방향에서 본 파손 영향(0~1)과 섞임(0~1). 흔적은 (방향 xyz, 반경의 코사인)이고 빈 칸은 코사인이 2다.
+            // 파손은 픽셀이 아니라 셀 중심 하나로 정해서, 판이 통째로 깨지거나 통째로 멀쩡하다(경계는 항상 판 테두리).
+            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 모든 셀이 영향 1이고 섞임은 _MixAmount 하나다.
+            // 접촉점을 쓰면 섞임은 흔적마다 주무른 양을 따르고, _MixFill이 커지면 남은 부분도 채운다.
+            float CellInfluence(float3 site, out float cellMix)
             {
                 if (_LocalDamage < 0.5)
                 {
-                    localMix = _MixAmount;
+                    cellMix = _MixAmount;
                     return 1.0;
                 }
 
-                float mask = 0.0;
-                localMix = 0.0;
+                float3 dir = normalize(site);
+                float influence = 0.0;
+                cellMix = 0.0;
                 for (int i = 0; i < 8; i++)
                 {
                     float4 stamp = _Stamps[i];
                     float inner = lerp(stamp.w, 1.0, 0.45);
-                    float t = saturate((dot(q, stamp.xyz) - stamp.w) / max(inner - stamp.w, 1e-4));
-                    float m = t * t * (3.0 - 2.0 * t);
-                    mask = max(mask, m);
-                    localMix = max(localMix, _StampMix[i] * saturate(t * 3.0));
+                    float t = saturate((dot(dir, stamp.xyz) - stamp.w) / max(inner - stamp.w, 1e-4));
+                    influence = max(influence, t * t * (3.0 - 2.0 * t));
+                    cellMix = max(cellMix, _StampMix[i] * saturate(t * 3.0));
                 }
-                localMix = max(localMix, _MixFill);
-                return max(mask, _MixFill);
+                cellMix = max(cellMix, _MixFill);
+                return max(influence, _MixFill);
+            }
+
+            // 판이 깨진 정도(0~1). 판마다 문턱(cellHash)이 달라서 손가락에 가까운 판부터 하나씩 깨지고,
+            // _BrokenAmount가 올라가는 동안 깨진 판이 손가락에서 바깥으로 번진다.
+            float CellBroken(float influence, float cellHash)
+            {
+                return saturate((influence * _BrokenAmount - (0.15 + 0.7 * cellHash)) * 6.0);
             }
 
             Varyings vert(Attributes input)
@@ -354,16 +367,22 @@ Shader "WaxBall/WaxShell"
                 Gap crack1 = Crack(q, _Crack1A, _Crack1B, _CrackAmounts.x);
                 Gap crack2 = Crack(q, _Crack2A, _Crack2B, _CrackAmounts.y);
 
-                float localMix;
-                float mask = DamageMask(q, localMix);
-
-                // Broken: 큰 판 사이 틈 + 큰 판 안에 하나씩 생기는 작은 판 경계
+                // Broken: 큰 판 사이 틈 + 큰 판 안에 하나씩 생기는 작은 판 경계. 파손은 판(셀) 단위다.
                 float fineScale = _PlateScale * _FineScaleMul;
                 VoronoiResult plateCells = Voronoi(q * _PlateScale);
                 VoronoiResult fineCells = Voronoi(q * fineScale);
-                float fineGate = saturate((saturate(_Fragment + _FragmentKnead * localMix) - fineCells.lineHash * 0.9) * 5.0) * _BrokenAmount;
-                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1, 0.0, mask, localMix);
-                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0, mask, localMix);
+
+                // 큰 판 두 개(이 픽셀의 판 A, 경계 건너편 판 B)의 파손과 섞임. 틈은 둘 중 하나라도 깨졌을 때 생긴다.
+                float mixA, mixB;
+                float brokenA = CellBroken(CellInfluence(plateCells.site1, mixA), plateCells.cellHash);
+                float brokenB = CellBroken(CellInfluence(plateCells.site2, mixB), plateCells.cellHashB);
+                float plateGate = max(brokenA, brokenB);
+
+                // 작은 판 경계는 이 픽셀의 큰 판이 깨져 있고, 그 판의 섞임(주무른 양)이 문턱을 넘은 곳에만 나타난다.
+                float fragment = saturate(_Fragment + _FragmentKnead * mixA);
+                float fineGate = saturate((fragment - fineCells.lineHash * 0.9) * 5.0) * brokenA;
+                Gap plate0 = PlateGap(q, plateCells, _PlateScale, plateGate, 1.0, 3.1, 0.0, brokenA, max(mixA, mixB));
+                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0, brokenA, mixA);
 
                 float cover = max(max(crack1.cover, crack2.cover), max(plate0.cover, plate1.cover));
                 float cavity = max(max(crack1.cavity, crack2.cavity), max(plate0.cavity, plate1.cavity));
