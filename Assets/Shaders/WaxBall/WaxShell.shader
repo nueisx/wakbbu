@@ -329,8 +329,8 @@ Shader "WaxBall/WaxShell"
                 if (_BrokenAmount > 0.001)
                 {
                     // 고무 케이스가 감싸고 있어 실루엣은 매끈한 구에 가깝다. grip에 따라 손가락 쪽만 둥글게 들어간다.
-                    float dentMask = smoothstep(0.3, 1.0, dot(normalOS, normalize(_DentDir.xyz)));
-                    positionOS -= normalOS * dentMask * _DentAmount * 0.17;
+                    float dentMask = smoothstep(0.55, 1.0, dot(normalOS, normalize(_DentDir.xyz)));
+                    positionOS -= normalOS * dentMask * _DentAmount * 0.09;
                 }
 
                 output.positionWS = TransformObjectToWorld(positionOS);
@@ -367,7 +367,7 @@ Shader "WaxBall/WaxShell"
 
                 // 손가락 쪽 오목한 면은 법선도 중심 쪽으로 살짝 기울인다.
                 float3 dentDir = normalize(_DentDir.xyz);
-                float dentMask = smoothstep(0.3, 1.0, dot(q, dentDir));
+                float dentMask = smoothstep(0.55, 1.0, dot(q, dentDir));
                 float3 dentTilt = (dentDir - dot(dentDir, q) * q) * dentMask * (1.0 - dentMask) * 4.0 * _DentAmount * 0.6;
 
                 // 점토가 틈에서 불룩 튀어나온 느낌: 틈 안쪽 법선을 판 쪽으로 기울인다.

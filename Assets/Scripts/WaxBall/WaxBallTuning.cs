@@ -92,10 +92,10 @@ namespace WaxBall
         // ---- 시각 효과 ----
         [Header("찌그러짐·균열")]
         [Tooltip("Cracked까지 grip이 최대일 때의 찌그러짐.")]
-        [Range(0f, 0.5f)] public float maxSquash = 0.25f;
+        [Range(0f, 0.5f)] public float maxSquash = 0.04f;
 
         [Tooltip("껍질이 깨진 뒤(Broken 이후)의 최대 찌그러짐. 껍질이 안 버티므로 maxSquash보다 크다.")]
-        [Range(0f, 0.7f)] public float brokenSquash = 0.45f;
+        [Range(0f, 0.7f)] public float brokenSquash = 0.08f;
 
         [Tooltip("Cracked에 막 들어갔을 때 균열이 이미 자라 있는 정도(0~1).")]
         [Range(0f, 1f)] public float minCrackAmount = 0.15f;

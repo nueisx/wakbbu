@@ -31,8 +31,8 @@ MonoBehaviour:
   spreadDegreesPerKnead: 2
   maxSpreadDegrees: 10
   rebindAngleDegrees: 25
-  maxSquash: 0.25
-  brokenSquash: 0.45
+  maxSquash: 0.04
+  brokenSquash: 0.08
   minCrackAmount: 0.15
   brokenRampDuration: 0.6
   fragmentSpeed: 0.5
