@@ -144,7 +144,8 @@ public static class WaxBallQuestSceneBuilder
         Transform anchor = null;
         foreach (var t in Object.FindObjectsOfType<Transform>(true))
         {
-            if (t.name == handName) Object.DestroyImmediate(t.gameObject);
+            // 부모를 지우면 그 자식은 이미 지워진 상태라 null 검사를 먼저 한다.
+            if (t != null && t.name == handName) Object.DestroyImmediate(t.gameObject);
         }
         foreach (var t in Object.FindObjectsOfType<Transform>(true))
         {
