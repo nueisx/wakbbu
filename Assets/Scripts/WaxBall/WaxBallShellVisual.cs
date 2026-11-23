@@ -50,6 +50,9 @@ namespace WaxBall
         private static readonly int MixAmountId = Shader.PropertyToID("_MixAmount");
         private static readonly int DentDirId = Shader.PropertyToID("_DentDir");
         private static readonly int DentAmountId = Shader.PropertyToID("_DentAmount");
+        private static readonly int CellTexId = Shader.PropertyToID("_CellTex");
+        private static readonly int DebugProbesId = Shader.PropertyToID("_DebugProbes");
+        private static readonly int PlateScaleId = Shader.PropertyToID("_PlateScale");
         private static readonly int Crack1AId = Shader.PropertyToID("_Crack1A");
         private static readonly int Crack1BId = Shader.PropertyToID("_Crack1B");
         private static readonly int Crack2AId = Shader.PropertyToID("_Crack2A");
@@ -69,6 +72,7 @@ namespace WaxBall
         private Vector3 crackStart2;
         private Vector4 crack1A, crack1B, crack2A, crack2B;
         private bool startsOverridden;
+        private WaxBallCellMap cellMap;
         private readonly Vector4[] stamps = new Vector4[WaxBallDamage.MaxStamps];
         private readonly float[] stampMix = new float[WaxBallDamage.MaxStamps];
 
@@ -80,6 +84,20 @@ namespace WaxBall
             if (stateMachine == null) stateMachine = GetComponentInParent<WaxBallStateMachine>();
             if (damage == null) damage = GetComponent<WaxBallDamage>();
             RandomizeCracks();
+            EnsureCellMap();
+        }
+
+        /// <summary>
+        /// 큰 판 표(WaxBallCellMap). 머티리얼의 _PlateScale이 바뀌면 다시 만든다. 에디터(Play 전)에서는 Gizmo용으로도 쓴다.
+        /// </summary>
+        public WaxBallCellMap EnsureCellMap()
+        {
+            var renderer = rend != null ? rend : GetComponent<Renderer>();
+            var material = renderer != null ? renderer.sharedMaterial : null;
+            float scale = material != null && material.HasProperty(PlateScaleId) ? material.GetFloat(PlateScaleId) : 1.6f;
+            if (cellMap == null) cellMap = new WaxBallCellMap();
+            if (cellMap.Texture == null || !Mathf.Approximately(cellMap.PlateScale, scale)) cellMap.Rebuild(scale);
+            return cellMap;
         }
 
         private void OnEnable()
@@ -210,6 +228,10 @@ namespace WaxBall
                 mixFill = areaReached ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(mixFillStart, 1f, progress)) : 0f;
             }
 
+            EnsureCellMap();
+            block.SetTexture(CellTexId, cellMap.Texture);
+            block.SetVectorArray(DebugProbesId, cellMap.ProbeVectors);
+
             block.SetFloat(LocalDamageId, local ? 1f : 0f);
             block.SetFloat(MixFillId, local ? mixFill : 0f);
             block.SetFloat(FragmentKneadId, local ? fragmentKneadWeight : 0f);
@@ -257,6 +279,25 @@ namespace WaxBall
             crack1B = new Vector4(angle1, Random.Range(0.15f, 0.45f), Random.Range(0f, 50f), Random.Range(0.85f, 1.2f));
             crack2A = new Vector4(crackStart2.x, crackStart2.y, crackStart2.z, Random.Range(0.45f, 0.8f));
             crack2B = new Vector4(angle2, Random.Range(0.1f, 0.5f), Random.Range(50f, 100f), Random.Range(0.6f, 0.95f));
+        }
+
+        // 선택했을 때 큰 판의 중심 점을 그린다. 중심 점이 화면의 판 한가운데에 있어야 CPU와 GPU의 판이 같은 것이다.
+        // 점 색은 셰이더 Debug Cells 화면의 판 색과 같은 식이고, 노란 점은 확인용 표식 점이다.
+        private void OnDrawGizmosSelected()
+        {
+            var map = EnsureCellMap();
+            Gizmos.matrix = transform.localToWorldMatrix;
+            for (int i = 0; i < WaxBallCellMap.SlotCount; i++)
+            {
+                if (!map.Used[i]) continue;
+                float h = map.CellHash[i];
+                Gizmos.color = new Color(0.35f + 0.6f * Mathf.Repeat(h * 5.17f, 1f), 0.35f + 0.6f * Mathf.Repeat(h * 9.31f, 1f), 0.35f + 0.6f * Mathf.Repeat(h * 2.73f, 1f));
+                Gizmos.DrawSphere(map.SiteDirection[i] * 0.5f, 0.035f);
+            }
+
+            Gizmos.color = Color.yellow;
+            foreach (var probe in map.ProbeVectors)
+                Gizmos.DrawWireSphere(new Vector3(probe.x, probe.y, probe.z) * 0.5f, 0.03f);
         }
 
         private static Vector3 RandomDirectionInCone(Vector3 forward, float halfAngleDegrees)
