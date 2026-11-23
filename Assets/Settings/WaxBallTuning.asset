@@ -27,17 +27,17 @@ MonoBehaviour:
   maxRadiusDegrees: 55
   pressureDamageRate: 0.03
   kneadDamageGain: 0.4
-  kneadAmountPerStamp: 13.5
+  kneadAmountPerStamp: 20
   spreadDegreesPerKnead: 2
   maxSpreadDegrees: 10
   rebindAngleDegrees: 25
-  maxSquash: 0.25
-  brokenSquash: 0.45
+  maxSquash: 0.04
+  brokenSquash: 0.08
   minCrackAmount: 0.15
   brokenRampDuration: 0.6
   fragmentSpeed: 0.5
-  fragmentBase: 0.2
-  fragmentGripWeight: 0.1
+  fragmentBase: 0
+  fragmentGripWeight: 0.05
   fragmentKneadWeight: 0.7
   mixFillStart: 0.85
   dentStrength: 0.5

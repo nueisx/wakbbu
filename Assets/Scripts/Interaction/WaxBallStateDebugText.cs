@@ -65,7 +65,7 @@ namespace Interaction
             {
                 string crack1 = damage.Crack1Finger.HasValue ? damage.Crack1Finger.Value.ToString() : "-";
                 string crack2 = damage.Crack2Finger.HasValue ? damage.Crack2Finger.Value.ToString() : "-";
-                text += $"\nDamage: {(damage.LocalMode ? "Local" : "Global")}, {damage.StampCount} stamps\nDamaged: {(damage.LocalMode ? $"{damage.DamagedRatio:P0}" : "Global")}\nCracks: {crack1} / {crack2}";
+                text += $"\nDamage: {(damage.LocalMode ? "Local" : "Global")}, {damage.BrokenCellCount}/{damage.CellCount} plates\nDamaged: {(damage.LocalMode ? $"{damage.DamagedRatio:P0}" : "Global")}\nCracks: {crack1} / {crack2}";
             }
 
             if (showFps)

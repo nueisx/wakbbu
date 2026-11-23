@@ -5,7 +5,7 @@ namespace WaxBall
     /// <summary>
     /// 왁스 껍질 시각 효과. 구조는 투명 고무층 > 왁스 껍질 > 흰 점토이고, 파편은 고무층 안에 갇혀 밖으로 튀지 않는다.
     /// grip에 따른 찌그러짐, 균열(_CrackAmounts), 파열(_BrokenAmount, _Fragment), 섞임(_MixAmount)을 셰이더에 넘긴다.
-    /// 접촉점을 쓰는 씬(WaxBallDamage.LocalMode)에서는 파손 흔적 주변만 깨지고, 균열은 손가락 아래에서 시작한다.
+    /// 접촉점을 쓰는 씬(WaxBallDamage.LocalMode)에서는 손가락이 누른 자리 근처의 판만 깨지고(판별 상태는 WaxBallDamage가 판 표 텍스처에 적는다), 균열은 손가락 아래에서 시작한다.
     /// 접촉점을 쓰지 않는 씬(Slider만 사용)에서는 공 전체가 깨지고, 균열의 시작점은 리셋(Idle)마다 무작위로 바뀐다.
     /// 균열의 방향, 길이, 휘어짐은 어느 경우든 리셋마다 무작위로 바뀐다.
     /// 이벤트와 Grip/MixProgress 프로퍼티를 읽기만 하고 상태 판정은 하지 않는다.
@@ -41,15 +41,16 @@ namespace WaxBall
 
         private static readonly int CrackAmountsId = Shader.PropertyToID("_CrackAmounts");
         private static readonly int LocalDamageId = Shader.PropertyToID("_LocalDamage");
-        private static readonly int StampsId = Shader.PropertyToID("_Stamps");
         private static readonly int BrokenAmountId = Shader.PropertyToID("_BrokenAmount");
         private static readonly int FragmentId = Shader.PropertyToID("_Fragment");
-        private static readonly int StampMixId = Shader.PropertyToID("_StampMix");
         private static readonly int MixFillId = Shader.PropertyToID("_MixFill");
         private static readonly int FragmentKneadId = Shader.PropertyToID("_FragmentKnead");
         private static readonly int MixAmountId = Shader.PropertyToID("_MixAmount");
         private static readonly int DentDirId = Shader.PropertyToID("_DentDir");
         private static readonly int DentAmountId = Shader.PropertyToID("_DentAmount");
+        private static readonly int CellTexId = Shader.PropertyToID("_CellTex");
+        private static readonly int DebugProbesId = Shader.PropertyToID("_DebugProbes");
+        private static readonly int PlateScaleId = Shader.PropertyToID("_PlateScale");
         private static readonly int Crack1AId = Shader.PropertyToID("_Crack1A");
         private static readonly int Crack1BId = Shader.PropertyToID("_Crack1B");
         private static readonly int Crack2AId = Shader.PropertyToID("_Crack2A");
@@ -69,8 +70,7 @@ namespace WaxBall
         private Vector3 crackStart2;
         private Vector4 crack1A, crack1B, crack2A, crack2B;
         private bool startsOverridden;
-        private readonly Vector4[] stamps = new Vector4[WaxBallDamage.MaxStamps];
-        private readonly float[] stampMix = new float[WaxBallDamage.MaxStamps];
+        private WaxBallCellMap cellMap;
 
         private void Awake()
         {
@@ -80,6 +80,20 @@ namespace WaxBall
             if (stateMachine == null) stateMachine = GetComponentInParent<WaxBallStateMachine>();
             if (damage == null) damage = GetComponent<WaxBallDamage>();
             RandomizeCracks();
+            EnsureCellMap();
+        }
+
+        /// <summary>
+        /// 큰 판 표(WaxBallCellMap). 머티리얼의 _PlateScale이 바뀌면 다시 만든다. 에디터(Play 전)에서는 Gizmo용으로도 쓴다.
+        /// </summary>
+        public WaxBallCellMap EnsureCellMap()
+        {
+            var renderer = rend != null ? rend : GetComponent<Renderer>();
+            var material = renderer != null ? renderer.sharedMaterial : null;
+            float scale = material != null && material.HasProperty(PlateScaleId) ? material.GetFloat(PlateScaleId) : 1.6f;
+            if (cellMap == null) cellMap = new WaxBallCellMap();
+            if (cellMap.Texture == null || !Mathf.Approximately(cellMap.PlateScale, scale)) cellMap.Rebuild(scale);
+            return cellMap;
         }
 
         private void OnEnable()
@@ -166,7 +180,7 @@ namespace WaxBall
             // 주물러서 쌓인 양(MixProgress)이 늘수록 판이 점점 잘게 쪼개지고, 쥐는 힘은 조금만 거든다.
             // 한 번 쪼개진 판은 다시 합쳐지지 않는다.
             float gripFactor = Mathf.InverseLerp(stateMachine.BreakThreshold, 1f, stateMachine.Grip);
-            // 접촉점 씬은 주무른 양 몫을 셰이더가 흔적마다 더하므로 여기서는 뺀다.
+            // 접촉점 씬은 주무른 양 몫을 셰이더가 판마다 더하므로 여기서는 뺀다.
             bool local = damage != null && damage.LocalMode;
             float kneadPart = local ? 0f : fragmentKneadWeight * stateMachine.MixProgress;
             float target = Mathf.Clamp01(fragmentBase + fragmentGripWeight * gripFactor + kneadPart);
@@ -200,15 +214,15 @@ namespace WaxBall
                     a2 = new Vector4(anchor2.x, anchor2.y, anchor2.z, crack2A.w);
                 else amount2 = 0f;
 
-                damage.FillShaderStamps(stamps, stampMix);
-                block.SetVectorArray(StampsId, stamps);
-                block.SetFloatArray(StampMixId, stampMix);
-
                 // 깨진 면적이 기준 이상이고 평균 섞임이 Mixed에 가까울 때만 남은 부분까지 채운다.
                 float progress = Mathf.Clamp01(stateMachine.MixProgress / stateMachine.MixAverageThreshold);
                 bool areaReached = damage.DamagedRatio >= stateMachine.MixAreaThreshold;
                 mixFill = areaReached ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(mixFillStart, 1f, progress)) : 0f;
             }
+
+            EnsureCellMap();
+            block.SetTexture(CellTexId, cellMap.Texture);
+            block.SetVectorArray(DebugProbesId, cellMap.ProbeVectors);
 
             block.SetFloat(LocalDamageId, local ? 1f : 0f);
             block.SetFloat(MixFillId, local ? mixFill : 0f);
@@ -257,6 +271,25 @@ namespace WaxBall
             crack1B = new Vector4(angle1, Random.Range(0.15f, 0.45f), Random.Range(0f, 50f), Random.Range(0.85f, 1.2f));
             crack2A = new Vector4(crackStart2.x, crackStart2.y, crackStart2.z, Random.Range(0.45f, 0.8f));
             crack2B = new Vector4(angle2, Random.Range(0.1f, 0.5f), Random.Range(50f, 100f), Random.Range(0.6f, 0.95f));
+        }
+
+        // 선택했을 때 큰 판의 중심 점을 그린다. 중심 점이 화면의 판 한가운데에 있어야 CPU와 GPU의 판이 같은 것이다.
+        // 점 색은 셰이더 Debug Cells 화면의 판 색과 같은 식이고, 노란 점은 확인용 표식 점이다.
+        private void OnDrawGizmosSelected()
+        {
+            var map = EnsureCellMap();
+            Gizmos.matrix = transform.localToWorldMatrix;
+            for (int i = 0; i < WaxBallCellMap.SlotCount; i++)
+            {
+                if (!map.Used[i]) continue;
+                float h = map.CellHash[i];
+                Gizmos.color = new Color(0.35f + 0.6f * Mathf.Repeat(h * 5.17f, 1f), 0.35f + 0.6f * Mathf.Repeat(h * 9.31f, 1f), 0.35f + 0.6f * Mathf.Repeat(h * 2.73f, 1f));
+                Gizmos.DrawSphere(map.SiteDirection[i] * 0.5f, 0.035f);
+            }
+
+            Gizmos.color = Color.yellow;
+            foreach (var probe in map.ProbeVectors)
+                Gizmos.DrawWireSphere(new Vector3(probe.x, probe.y, probe.z) * 0.5f, 0.03f);
         }
 
         private static Vector3 RandomDirectionInCone(Vector3 forward, float halfAngleDegrees)

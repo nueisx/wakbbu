@@ -3,10 +3,11 @@
 // - Idle/Pressed: 매끈한 단색 공. 균열 없음.
 // - Cracked(_CrackAmounts): 판은 그대로이고 삐뚤빼뚤한 균열 두 줄을 따라 흰 점토가 불룩하게 비집고 나온다.
 //   균열의 시작점, 방향, 길이, 휘어짐은 C#(WaxBallShellVisual)이 리셋마다 무작위로 넣는다(_Crack1A/B, _Crack2A/B).
-// - 접촉점을 쓰면(_LocalDamage = 1) Broken과 Mixed의 판 갈라짐이 손가락이 누른 자리(_Stamps) 주변에서 시작해 번져 나가고,
+// - 접촉점을 쓰면(_LocalDamage = 1) Broken과 Mixed의 판 갈라짐이 손가락이 누른 자리 주변의 판부터 깨지고(판별 상태는 C#이 _CellTex에 적는다),
 //   MixProgress가 커질수록 공 전체로 퍼진다. 접촉점을 쓰지 않으면 공 전체가 깨진다.
 // - Broken(_BrokenAmount, _Fragment): 큰 판 몇 개로 갈라지고 틈은 흰 점토 색이다.
 //   _Fragment가 커질수록 큰 판 안에 작은 판 경계가 하나씩 생겨 더 잘게 쪼개진다.
+//   파손은 판(Voronoi 셀) 단위다. 셀 중심에서 파손 영향을 한 번만 계산해 판이 통째로 깨지거나 멀쩡하고, 경계는 항상 판 테두리를 따른다.
 // - Mixed(_MixAmount = MixProgress): 작은 판 중 일부(_PieceFraction)만 가장자리가 줄어든 작은 조각으로 남고 나머지는 점토에 묻힌다.
 //   흰색이 표면 대부분을 덮고(mixed), 끝에는 표면의 약 20%에 작고 납작한 초록 조각이 군데군데 남는다(mixed-02).
 //   점토는 고무에 눌려 매끈하고, 실루엣과 표면에 노이즈 요철은 없다. grip에 따라 손가락 쪽만 둥글게 들어간다(_DentDir).
@@ -21,6 +22,7 @@ Shader "WaxBall/WaxShell"
     {
         _ShellColor("Shell Color (왁스 껍질)", Color) = (0.55, 0.8, 0.15, 1)
         _ClayColor("Clay Color (점토)", Color) = (0.98, 0.98, 0.96, 1)
+        _ClayShade("Clay Shade (점토 가장 어두운 곳의 색. 누렇거나 회색이 되지 않는 연한 청백색)", Color) = (0.84, 0.86, 0.93, 1)
 
         [Header(Crack)]
         _CrackAmounts("Crack Amounts (x: 첫 번째 균열, y: 두 번째 균열)", Vector) = (0, 0, 0, 0)
@@ -34,9 +36,10 @@ Shader "WaxBall/WaxShell"
         [Header(Broken)]
         _BrokenAmount("Broken Amount", Range(0, 1)) = 0
         _Fragment("Fragment (판이 쪼개진 정도)", Range(0, 1)) = 0
-        _PlateScale("Plate Scale (큰 판)", Range(1, 6)) = 1.6
+        _PlateScale("Plate Scale (큰 판. 판 번호 표가 8x8x8 격자라 2.5까지만)", Range(1, 2.5)) = 1.6
         _FineScaleMul("Fine Scale Multiplier (작은 판)", Range(1.5, 4)) = 2.2
-        _PlateGapWidth("Plate Gap Width (틈 전체 폭, 구 반지름 기준)", Range(0.02, 0.4)) = 0.2
+        _PlateGapWidth("Plate Gap Width (가장 넓을 때 틈 전체 폭, 구 반지름 기준)", Range(0.02, 0.4)) = 0.2
+        _PlateGapWidthMin("Plate Gap Width Min (갓 깨졌을 때 틈 전체 폭. 주무를수록 위 값까지 넓어짐)", Range(0.005, 0.2)) = 0.05
         _DentDir("Dent Direction (오브젝트 공간)", Vector) = (0, 0, -1, 0)
         _DentAmount("Dent Amount", Range(0, 1)) = 0
 
@@ -51,10 +54,14 @@ Shader "WaxBall/WaxShell"
         _PieceInset("Piece Inset (남는 조각이 가장자리에서 줄어든 폭, 클수록 작은 조각)", Range(0.005, 0.08)) = 0.03
 
         [Header(Edge and Clay)]
-        _RimWidth("Rim Width (판 가장자리 밝은 테두리)", Range(0, 0.1)) = 0.03
+        _RimWidth("Rim Width (판 가장자리 밝은 테두리, 얇게)", Range(0, 0.1)) = 0.012
         _RimBrightness("Rim Brightness", Range(0, 1)) = 0.45
         _BulgeStrength("Clay Bulge (틈 가장자리 음영, 표면 요철처럼 보이므로 작게)", Range(0, 1.5)) = 0.1
         _MinPixelWidth("Min Pixel Width (선 최소 굵기, px)", Range(0, 3)) = 1
+
+        [Header(Cell State)]
+        [NoScaleOffset] _CellTex("Cell State (판별 상태 표. C#이 채운다. R 깨짐, G 섞임, B 확인용 셀 값, A 확인용 표식)", 2D) = "black" {}
+        [Toggle(_DEBUG_CELLS)] _DebugCells("Debug Cells (판마다 색을 칠하고 C#이 알고 있는 판과 비교한다. 확인용)", Float) = 0
 
         [Header(Casing)]
         _FresnelPower("Fresnel Power", Range(1, 8)) = 3
@@ -74,12 +81,14 @@ Shader "WaxBall/WaxShell"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma shader_feature_local _ _DEBUG_CELLS
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 half4 _ShellColor;
                 half4 _ClayColor;
+                half4 _ClayShade;
                 float4 _CrackAmounts;
                 float _CrackLength;
                 float _GapWidth;
@@ -92,14 +101,13 @@ Shader "WaxBall/WaxShell"
                 float _PlateScale;
                 float _FineScaleMul;
                 float _PlateGapWidth;
+                float _PlateGapWidthMin;
                 float4 _DentDir;
                 float _DentAmount;
                 float _LocalDamage;
-                float4 _Stamps[8];
                 float _MixAmount;
                 float _MixFill;
                 float _FragmentKnead;
-                float _StampMix[8];
                 float _PieceFraction;
                 float _PieceInset;
                 float _RimWidth;
@@ -109,7 +117,10 @@ Shader "WaxBall/WaxShell"
                 float _FresnelPower;
                 float _FresnelStrength;
                 float _CasingEdge;
+                float4 _DebugProbes[8];
             CBUFFER_END
+
+            TEXTURE2D(_CellTex);
 
             // Quest는 Multiview(한 번에 양쪽 눈을 그림)를 쓰므로 스테레오 인스턴싱 매크로가 꼭 필요하다.
             // 빠지면 한쪽 눈이 비거나 양쪽 눈이 같은 그림으로 나온다.
@@ -132,6 +143,7 @@ Shader "WaxBall/WaxShell"
             struct Gap
             {
                 float cover;     // 흰 점토가 보이는 정도
+                float cavity;    // 틈 안쪽 판 가장자리 근처의 그늘 정도(틈 가운데 0, 판 가장자리 1)
                 float rim;       // 판 가장자리 밝은 테두리 정도
                 float3 shift;    // 점토가 불룩해 보이도록 법선을 기울이는 방향(오브젝트 공간)
             };
@@ -143,6 +155,9 @@ Shader "WaxBall/WaxShell"
                 float cellHash;  // 가장 가까운 셀의 무작위 값(Mixed에서 어떤 판이 남는지 정한다)
                 float cellHash2; // 두 번째 무작위 값(조각 크기, 사라지는 시점)
                 float3 grad;     // 셀1 → 셀2 방향
+                float cellHashB; // 두 번째 셀의 무작위 값(cellHash와 같은 식)
+                float3 id1;      // 가장 가까운 셀의 격자 좌표(정수 값). 판 번호 표(_CellTex)의 칸을 정한다.
+                float3 id2;      // 두 번째 셀의 격자 좌표
             };
 
             float Hash1(float3 p)
@@ -150,12 +165,16 @@ Shader "WaxBall/WaxShell"
                 return frac(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
             }
 
-            float3 Hash3(float3 p)
+            // 셀 점의 위치와 cellHash는 정수 해시(PCG3D)다. C#(WaxBallCellMap)이 똑같이 계산해서 판을 CPU에서도 알 수 있다.
+            // sin 기반 해시는 GPU마다 값이 달라 CPU가 재현할 수 없으므로 판 배치에는 쓰지 않는다.
+            // 값은 상위 24비트만 float로 바꿔서 CPU와 GPU가 비트까지 같다.
+            float3 IntHash3(int3 id)
             {
-                p = float3(dot(p, float3(127.1, 311.7, 74.7)),
-                           dot(p, float3(269.5, 183.3, 246.1)),
-                           dot(p, float3(113.5, 271.9, 124.6)));
-                return frac(sin(p) * 43758.5453);
+                uint3 v = (uint3)(id + 16) * 1664525u + 1013904223u;
+                v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+                v ^= v >> 16u;
+                v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+                return (float3)(v >> 8u) * (1.0 / 16777216.0);
             }
 
             float Noise3(float3 p)
@@ -190,7 +209,7 @@ Shader "WaxBall/WaxShell"
                 {
                     float3 offset = float3(x, y, z);
                     float3 id = cell + offset;
-                    float3 diff = offset + Hash3(id) - local;
+                    float3 diff = offset + IntHash3((int3)round(id)) - local;
                     float d = dot(diff, diff);
                     if (d < d1) { d2 = d1; id2 = id1; v2 = v1; d1 = d; id1 = id; v1 = diff; }
                     else if (d < d2) { d2 = d; id2 = id; v2 = diff; }
@@ -200,9 +219,12 @@ Shader "WaxBall/WaxShell"
                 result.edge = sqrt(d2) - sqrt(d1);
                 // 두 셀 id의 합은 순서와 무관하므로 같은 경계 선은 항상 같은 값을 갖는다.
                 result.lineHash = Hash1(id1 + id2);
-                result.cellHash = Hash1(id1 * 1.37 + 11.1);
+                result.cellHash = IntHash3((int3)round(id1) + int3(37, 91, 53)).x;
                 result.cellHash2 = Hash1(id1 * 2.71 + 5.3);
                 result.grad = normalize(v2 - v1 + 1e-5);
+                result.cellHashB = IntHash3((int3)round(id2) + int3(37, 91, 53)).x;
+                result.id1 = id1;
+                result.id2 = id2;
                 return result;
             }
 
@@ -214,7 +236,9 @@ Shader "WaxBall/WaxShell"
 
                 Gap gap;
                 gap.cover = (1.0 - smoothstep(w - px * 0.5, w + px * 0.5, d)) * inside;
-                gap.rim = (1.0 - smoothstep(w, w + rimW + px, d)) * inside * (1.0 - gap.cover);
+                // 테두리는 번지지 않고 또렷하게 끊기는 얇은 띠(1px 안티에일리어싱만)로 그린다. 부드럽게 줄어들면 흰 선이 빛나 보인다.
+                gap.rim = (1.0 - smoothstep(w + rimW - px * 0.5, w + rimW + px * 0.5, d)) * inside * (1.0 - gap.cover);
+                gap.cavity = saturate((d / max(w, 1e-4) - 0.35) / 0.65) * gap.cover;
                 gap.shift = dirAway * saturate(d / max(w, 1e-4)) * gap.cover;
                 return gap;
             }
@@ -256,21 +280,22 @@ Shader "WaxBall/WaxShell"
             // 판 사이 틈(Voronoi 경계). gate: 이 경계가 얼마나 나타났는지(0~1), 클수록 넓다.
             // isFine: 작은 판 층이면 1. Mixed에서 작은 판 중 일부(_PieceFraction)만 작은 조각으로 남고 나머지는 점토에 묻혀 사라진다.
             // 큰 판 층(isFine = 0)의 틈은 섞일수록 가늘어져서 남은 조각을 자르지 않는다.
-            // mix: 이 자리의 섞임 정도(0~1). 접촉점을 쓰면 흔적마다 주무른 양을 따르고, 아니면 전체 값(_MixAmount)이다.
-            // mask: 파손 흔적 주변 정도(0~1). 경계마다 나타나는 반경이 달라서 파손 범위가 경계를 따라 하나씩 번져 나간다.
-            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine, float mask, float mix)
+            // cellGate: 이 픽셀이 속한 판이 깨진 정도(0~1). 판 단위로 정해진다.
+            // mix: 이 판의 섞임 정도(0~1). 접촉점을 쓰면 흔적마다 주무른 양을 따르고, 아니면 전체 값(_MixAmount)이다.
+            Gap PlateGap(float3 q, VoronoiResult v, float scale, float gate, float widthScale, float seed, float isFine, float cellGate, float mix)
             {
-                gate *= saturate((mask * 1.2 - v.lineHash * 0.85) * 6.0);
-                float cellGate = saturate((mask * 1.2 - v.cellHash * 0.85) * 6.0);
-
                 // 셀 단위 거리를 구 반지름 단위 거리로 바꾼다(경계까지 거리 ≈ edge의 절반).
                 float dBase = 0.5 * v.edge / scale;
                 float px = fwidth(dBase);
                 float d = dBase + (Noise3(q * 9.0 + seed) - 0.5) * 0.03;
 
                 float widthVariation = lerp(0.5, 1.5, Noise3(q * 4.0 + seed * 1.7));
-                float wBase = _PlateGapWidth * 0.5 * widthScale * gate * widthVariation;
-                float w = wBase * (1.0 - mix * lerp(0.85, 1.0, isFine));
+                // 갓 깨진 판은 크기 그대로 틈만 가늘고(_PlateGapWidthMin), 주무를수록(mix 0.4까지) 틈이 넓어진다.
+                // 섞임이 절반을 넘으면 틈이 다시 가늘어져 남은 조각을 자르지 않는다.
+                float grow = lerp(_PlateGapWidthMin / _PlateGapWidth, 1.0, saturate(mix * 2.5));
+                float shrink = 1.0 - smoothstep(0.5, 1.0, mix) * lerp(0.85, 1.0, isFine);
+                float wBase = _PlateGapWidth * 0.5 * widthScale * gate * widthVariation * grow;
+                float w = wBase * shrink;
                 float wMix = 0.0;
 
                 if (isFine > 0.5)
@@ -289,31 +314,66 @@ Shader "WaxBall/WaxShell"
                 return MakeGap(d, px, w, inside, rimW, normalize(away + 1e-5));
             }
 
-            // 파손 흔적 주변이 얼마나 깨졌는지(0~1). 흔적은 (방향 xyz, 반경의 코사인)이고 빈 칸은 코사인이 2다.
-            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 공 전체가 깨지고 섞임은 _MixAmount 하나다.
-            // 접촉점을 쓰면 localMix는 흔적마다 주무른 양을 따르고, _MixFill이 커지면 남은 부분도 채운다.
-            float DamageMask(float3 q, out float localMix)
+            // 판이 깨진 정도(0~1). 판마다 문턱(cellHash)이 달라서 영향이 큰 판부터 하나씩 깨진다.
+            // influence는 접촉점을 쓰지 않을 때 1이고, 접촉점을 쓸 때는 C#이 같은 식으로 계산해 표에 적는다(여기서는 _MixFill에만 쓴다).
+            float CellBroken(float influence, float cellHash)
+            {
+                return saturate((influence * _BrokenAmount - (0.15 + 0.7 * cellHash)) * 6.0);
+            }
+
+            // 큰 판 하나의 깨짐(0~1)과 섞임(0~1). 접촉점을 쓰지 않으면(_LocalDamage = 0) 모든 판이 _BrokenAmount를 따라 하나씩 깨지고 섞임은 _MixAmount 하나다.
+            // 접촉점을 쓰면 C#(WaxBallDamage)이 판 번호 표(_CellTex)에 적어 둔 값을 읽는다. R: 깨짐, G: 섞임.
+            // _MixFill이 커지면 남은 판도 채워서 Mixed 직전에 표면 전체가 덮인다.
+            // 판 번호는 격자 좌표 하나로 정한다: (x+4) + 8*(y+4) + 64*(z+4). WaxBallCellMap과 같은 식이다.
+            float PlateBroken(float3 id, float cellHash, out float cellMix)
             {
                 if (_LocalDamage < 0.5)
                 {
-                    localMix = _MixAmount;
-                    return 1.0;
+                    cellMix = _MixAmount;
+                    return CellBroken(1.0, cellHash);
                 }
 
-                float mask = 0.0;
-                localMix = 0.0;
-                for (int i = 0; i < 8; i++)
-                {
-                    float4 stamp = _Stamps[i];
-                    float inner = lerp(stamp.w, 1.0, 0.45);
-                    float t = saturate((dot(q, stamp.xyz) - stamp.w) / max(inner - stamp.w, 1e-4));
-                    float m = t * t * (3.0 - 2.0 * t);
-                    mask = max(mask, m);
-                    localMix = max(localMix, _StampMix[i] * saturate(t * 3.0));
-                }
-                localMix = max(localMix, _MixFill);
-                return max(mask, _MixFill);
+                int3 cell = clamp((int3)round(id) + 4, 0, 7);
+                uint slot = (uint)(cell.x + 8 * cell.y + 64 * cell.z);
+                float2 state = LOAD_TEXTURE2D(_CellTex, int2(slot & 31u, slot >> 5u)).rg;
+                cellMix = max(state.y, _MixFill);
+                return max(state.x, CellBroken(_MixFill, cellHash));
             }
+
+#if defined(_DEBUG_CELLS)
+            // 확인용 화면. 판마다 셰이더가 계산한 cellHash로 색을 칠하고, 경계는 검은 선이다.
+            // 판 번호 표(_CellTex)의 B값(C#이 계산한 cellHash)이 셰이더 값과 다르면 자홍색, 표 범위를 벗어나면 청록색이다.
+            // 표가 비어 있으면(Play 전) 비교 없이 판 색만 보인다.
+            // 표 A값이 1인 판(C#이 표식 점이 들어 있다고 본 판)은 붉게 칠하고, 표식 점(_DebugProbes)은 노란 점으로 그린다.
+            // 노란 점이 모두 붉은 판 안에 있으면 CPU와 GPU가 같은 판을 고른 것이다.
+            half3 DebugCellColor(float3 q, VoronoiResult cells)
+            {
+                int3 id = (int3)round(cells.id1) + 4;
+                half3 color;
+                if (any(id < 0) || any(id > 7))
+                {
+                    color = half3(0, 1, 1);
+                }
+                else
+                {
+                    uint slot = (uint)(id.x + 8 * id.y + 64 * id.z);
+                    float4 texel = LOAD_TEXTURE2D(_CellTex, int2(slot & 31u, slot >> 5u));
+                    float h = cells.cellHash;
+                    color = half3(0.35 + 0.6 * frac(h * 5.17), 0.35 + 0.6 * frac(h * 9.31), 0.35 + 0.6 * frac(h * 2.73));
+                    if (texel.a > 0.5) color = lerp(color, half3(1, 0.1, 0.1), 0.75);
+                    // 표 맨 아래 줄(17번째 줄)의 첫 칸 R이 1이면 C#이 채운 표다. 표가 없으면(Play 전, None) 비교를 건너뛴다.
+                    float tableReady = LOAD_TEXTURE2D(_CellTex, int2(0, 16)).r;
+                    if (tableReady > 0.5 && abs(texel.b - h) > 0.004) color = half3(1, 0, 1);
+                }
+
+                float border = 1.0 - smoothstep(0.0, fwidth(cells.edge) * 1.5 + 0.01, cells.edge);
+                color = lerp(color, half3(0, 0, 0), border);
+
+                for (int i = 0; i < 8; i++)
+                    if (dot(q, _DebugProbes[i].xyz) > 0.9985) color = half3(1, 1, 0);
+                return color;
+            }
+#endif
 
             Varyings vert(Attributes input)
             {
@@ -329,8 +389,8 @@ Shader "WaxBall/WaxShell"
                 if (_BrokenAmount > 0.001)
                 {
                     // 고무 케이스가 감싸고 있어 실루엣은 매끈한 구에 가깝다. grip에 따라 손가락 쪽만 둥글게 들어간다.
-                    float dentMask = smoothstep(0.3, 1.0, dot(normalOS, normalize(_DentDir.xyz)));
-                    positionOS -= normalOS * dentMask * _DentAmount * 0.17;
+                    float dentMask = smoothstep(0.55, 1.0, dot(normalOS, normalize(_DentDir.xyz)));
+                    positionOS -= normalOS * dentMask * _DentAmount * 0.09;
                 }
 
                 output.positionWS = TransformObjectToWorld(positionOS);
@@ -350,24 +410,35 @@ Shader "WaxBall/WaxShell"
                 Gap crack1 = Crack(q, _Crack1A, _Crack1B, _CrackAmounts.x);
                 Gap crack2 = Crack(q, _Crack2A, _Crack2B, _CrackAmounts.y);
 
-                float localMix;
-                float mask = DamageMask(q, localMix);
-
-                // Broken: 큰 판 사이 틈 + 큰 판 안에 하나씩 생기는 작은 판 경계
+                // Broken: 큰 판 사이 틈 + 큰 판 안에 하나씩 생기는 작은 판 경계. 파손은 판(셀) 단위다.
                 float fineScale = _PlateScale * _FineScaleMul;
                 VoronoiResult plateCells = Voronoi(q * _PlateScale);
                 VoronoiResult fineCells = Voronoi(q * fineScale);
-                float fineGate = saturate((saturate(_Fragment + _FragmentKnead * localMix) - fineCells.lineHash * 0.9) * 5.0) * _BrokenAmount;
-                Gap plate0 = PlateGap(q, plateCells, _PlateScale, _BrokenAmount, 1.0, 3.1, 0.0, mask, localMix);
-                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0, mask, localMix);
+
+#if defined(_DEBUG_CELLS)
+                return half4(DebugCellColor(q, plateCells), 1);
+#endif
+
+                // 큰 판 두 개(이 픽셀의 판 A, 경계 건너편 판 B)의 파손과 섞임. 틈은 둘 중 하나라도 깨졌을 때 생긴다.
+                float mixA, mixB;
+                float brokenA = PlateBroken(plateCells.id1, plateCells.cellHash, mixA);
+                float brokenB = PlateBroken(plateCells.id2, plateCells.cellHashB, mixB);
+                float plateGate = max(brokenA, brokenB);
+
+                // 작은 판 경계는 이 픽셀의 큰 판이 깨져 있고, 그 판의 섞임(주무른 양)이 문턱을 넘은 곳에만 나타난다.
+                float fragment = saturate(_Fragment + _FragmentKnead * mixA);
+                float fineGate = saturate((fragment - fineCells.lineHash * 0.9) * 5.0) * brokenA;
+                Gap plate0 = PlateGap(q, plateCells, _PlateScale, plateGate, 1.0, 3.1, 0.0, brokenA, max(mixA, mixB));
+                Gap plate1 = PlateGap(q, fineCells, fineScale, fineGate, 0.6, 8.9, 1.0, brokenA, mixA);
 
                 float cover = max(max(crack1.cover, crack2.cover), max(plate0.cover, plate1.cover));
+                float cavity = max(max(crack1.cavity, crack2.cavity), max(plate0.cavity, plate1.cavity));
                 float rim = max(max(crack1.rim, crack2.rim), max(plate0.rim, plate1.rim));
                 float3 shift = crack1.shift + crack2.shift + plate0.shift + plate1.shift;
 
                 // 손가락 쪽 오목한 면은 법선도 중심 쪽으로 살짝 기울인다.
                 float3 dentDir = normalize(_DentDir.xyz);
-                float dentMask = smoothstep(0.3, 1.0, dot(q, dentDir));
+                float dentMask = smoothstep(0.55, 1.0, dot(q, dentDir));
                 float3 dentTilt = (dentDir - dot(dentDir, q) * q) * dentMask * (1.0 - dentMask) * 4.0 * _DentAmount * 0.6;
 
                 // 점토가 틈에서 불룩 튀어나온 느낌: 틈 안쪽 법선을 판 쪽으로 기울인다.
@@ -384,7 +455,11 @@ Shader "WaxBall/WaxShell"
                 half3 diffuse = mainLight.color * saturate(dot(normal, mainLight.direction)) * 0.8
                               + SampleSH(normal);
                 half wrap = dot(normal, mainLight.direction) * 0.5 + 0.5;
-                half3 softDiffuse = half3(1, 1, 1) * lerp(0.9, 1.0, wrap);
+                // 점토: 광원 색과 무관하게 부드러운 반구 음영(위쪽이 밝고 아래쪽이 연한 청백색). 틈 안쪽 판 가장자리 근처는 살짝 어둡다.
+                // 가장 어두운 곳도 _ClayShade(약 85~90% 밝기의 연한 청백색)라 회색이나 누런색이 되지 않는다. 하이라이트는 넣지 않는다.
+                half clayLight = saturate(wrap * 0.65 + (normal.y * 0.5 + 0.5) * 0.35);
+                half3 softDiffuse = lerp(_ClayShade.rgb, half3(1, 1, 1), smoothstep(0.15, 0.9, clayLight));
+                softDiffuse = lerp(softDiffuse, _ClayShade.rgb, cavity * 0.6);
                 diffuse = lerp(diffuse, softDiffuse, cover);
 
                 // 가장자리: 고무 두께가 비치는 밝고 투명한 테두리와 가는 가장자리 선(하이라이트는 없다)
