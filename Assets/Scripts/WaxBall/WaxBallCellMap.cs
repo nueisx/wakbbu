@@ -8,6 +8,7 @@ namespace WaxBall
     /// 판 번호(slot)는 격자 좌표 하나로 정한다: (x+4) + 8*(y+4) + 64*(z+4), 0~511. 그래서 _PlateScale은 2.5 이하여야 한다.
     /// 판별 상태는 32x16 텍스처(RGBAHalf, 포인트 샘플링)에 담아 셰이더에 넘긴다. R: 깨짐, G: 섞임(2단계에서 채운다),
     /// B: CPU가 계산한 셀 무작위 값(셰이더 값과 비교하는 확인용), A: 확인용 표식 점(probe)이 들어 있는 판이면 1.
+    /// 17번째 줄(판 512칸 아래)의 첫 칸 R은 "C#이 채운 표"라는 표시(1)이다. 표가 없을 때 셰이더가 비교를 건너뛰는 데 쓴다.
     /// </summary>
     public sealed class WaxBallCellMap
     {
@@ -15,7 +16,7 @@ namespace WaxBall
         public const int GridOffset = 4;
         public const int SlotCount = GridSize * GridSize * GridSize;
         public const int TextureWidth = 32;
-        public const int TextureHeight = 16;
+        public const int TextureHeight = 17;
         public const int ProbeCount = 8;
 
         // 판 목록을 만들 때 표면에 뿌리는 점 개수. 작은 판도 놓치지 않도록 넉넉히 잡는다.
@@ -89,6 +90,7 @@ namespace WaxBall
 
             for (int i = 0; i < SlotCount; i++)
                 if (Used[i]) pixels[i].b = CellHash[i];
+            pixels[SlotCount].r = 1f;
 
             if (Texture == null)
             {

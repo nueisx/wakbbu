@@ -358,6 +358,7 @@ Shader "WaxBall/WaxShell"
 #if defined(_DEBUG_CELLS)
             // 확인용 화면. 판마다 셰이더가 계산한 cellHash로 색을 칠하고, 경계는 검은 선이다.
             // 판 번호 표(_CellTex)의 B값(C#이 계산한 cellHash)이 셰이더 값과 다르면 자홍색, 표 범위를 벗어나면 청록색이다.
+            // 표가 비어 있으면(Play 전) 비교 없이 판 색만 보인다.
             // 표 A값이 1인 판(C#이 표식 점이 들어 있다고 본 판)은 붉게 칠하고, 표식 점(_DebugProbes)은 노란 점으로 그린다.
             // 노란 점이 모두 붉은 판 안에 있으면 CPU와 GPU가 같은 판을 고른 것이다.
             half3 DebugCellColor(float3 q, VoronoiResult cells)
@@ -375,7 +376,9 @@ Shader "WaxBall/WaxShell"
                     float h = cells.cellHash;
                     color = half3(0.35 + 0.6 * frac(h * 5.17), 0.35 + 0.6 * frac(h * 9.31), 0.35 + 0.6 * frac(h * 2.73));
                     if (texel.a > 0.5) color = lerp(color, half3(1, 0.1, 0.1), 0.75);
-                    if (abs(texel.b - h) > 0.004) color = half3(1, 0, 1);
+                    // 표 맨 아래 줄(17번째 줄)의 첫 칸 R이 1이면 C#이 채운 표다. 표가 없으면(Play 전, None) 비교를 건너뛴다.
+                    float tableReady = LOAD_TEXTURE2D(_CellTex, int2(0, 16)).r;
+                    if (tableReady > 0.5 && abs(texel.b - h) > 0.004) color = half3(1, 0, 1);
                 }
 
                 float border = 1.0 - smoothstep(0.0, fwidth(cells.edge) * 1.5 + 0.01, cells.edge);
