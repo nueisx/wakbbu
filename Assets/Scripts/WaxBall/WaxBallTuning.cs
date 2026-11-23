@@ -40,7 +40,7 @@ namespace WaxBall
         [Tooltip("접촉점을 쓰는 씬에서, 공 표면 중 파손된 면적 비율이 이 값 이상이면 Mixed가 된다(0.8 = 80%). 접촉점이 없는 씬은 kneadAmountToMix를 쓴다.")]
         [Range(0.1f, 1f)] public float mixAreaThreshold = 0.8f;
 
-        [Tooltip("접촉점을 쓰는 씬에서, 깨진 자리의 평균 섞임(깨진 면적 가중, 흔적마다 주무른 양 기준)이 이 값 이상이어야 Mixed가 된다(0.9 = 90%).")]
+        [Tooltip("접촉점을 쓰는 씬에서, 깨진 판의 평균 섞임(깨진 면적 가중, 판마다 주무른 양 기준)이 이 값 이상이어야 Mixed가 된다(0.9 = 90%).")]
         [Range(0.1f, 1f)] public float mixAverageThreshold = 0.9f;
 
         [Header("Crunched (Broken 상태에서 손가락으로 주무를 때)")]
@@ -73,20 +73,20 @@ namespace WaxBall
         [Tooltip("손가락 세기가 1만큼 변할 때(주무를 때) 늘어나는 파손 정도.")]
         [Min(0f)] public float kneadDamageGain = 0.4f;
 
-        [Header("섞임 (흔적별 주무른 양)")]
-        [Tooltip("한 흔적이 완전히 섞이기까지 필요한 주무른 양(세기 변화량 합). 흔적 하나에는 가장 많이 움직인 손가락 하나의 변화량만 쌓인다. " +
+        [Header("섞임 (판별 주무른 양)")]
+        [Tooltip("한 판이 완전히 섞이기까지 필요한 주무른 양(세기 변화량 합). 판 하나에는 가장 많이 움직인 손가락 하나의 변화량만 쌓인다. 필드 이름은 예전 그대로다. " +
                  "기본 20(전체 기준 4.5의 약 4.4배)라서 몇 번 주무르는 동안 초록 판 + 흰 틈이 보인다.")]
         [Min(0.1f)] public float kneadAmountPerStamp = 20f;
 
         [Header("번지기 (아주 약하게)")]
-        [Tooltip("같은 자리를 주물러 세기가 1만큼 변할 때 흔적 반경이 더 넓어지는 각도(도). 0이면 꺼진다.")]
+        [Tooltip("같은 자리를 주물러 세기가 1만큼 변할 때 자리 반경이 더 넓어지는 각도(도). 0이면 꺼진다.")]
         [Min(0f)] public float spreadDegreesPerKnead = 2f;
 
-        [Tooltip("번지기로 늘어나는 반경의 상한(도). 반경은 최대 55 + 10 = 65도라 한 흔적이 약 22%이고, 세 손가락이 같은 자리면 40~50%에서 멈춘다.")]
+        [Tooltip("번지기로 늘어나는 반경의 상한(도). 반경은 최대 55 + 10 = 65도다. 세 손가락이 같은 자리면 어디서 멈추는지는 에디터에서 확인한다.")]
         [Min(0f)] public float maxSpreadDegrees = 10f;
 
         [Header("접촉점 묶기")]
-        [Tooltip("손가락이 흔적에서 이 각도(도) 안에 있으면 같은 흔적을 키우고, 벗어나면 새 흔적을 만든다.")]
+        [Tooltip("손가락이 자리에서 이 각도(도) 안에 있으면 같은 자리를 키우고, 벗어나면 새 자리를 만든다.")]
         [Range(5f, 60f)] public float rebindAngleDegrees = 25f;
 
         // ---- 시각 효과 ----
@@ -113,7 +113,7 @@ namespace WaxBall
         [Tooltip("쥐는 힘(grip)이 쪼개짐에 주는 비중. 작을수록 트리거를 조금 움직여서는 쪼개지지 않는다.")]
         [Range(0f, 1f)] public float fragmentGripWeight = 0.05f;
 
-        [Tooltip("주무른 양(MixProgress, 접촉점 씬은 흔적마다 주무른 양)이 쪼개짐에 주는 비중. 클수록 여러 번 주물러야 점점 잘게 깨진다.")]
+        [Tooltip("주무른 양(MixProgress, 접촉점 씬은 판마다 주무른 양)이 쪼개짐에 주는 비중. 클수록 여러 번 주물러야 점점 잘게 깨진다.")]
         [Range(0f, 1f)] public float fragmentKneadWeight = 0.7f;
 
         [Tooltip("접촉점 씬에서 남은 부분까지 채우기 시작하는 진행도(평균 섞임 / Mixed 기준값). 깨진 면적이 기준 이상일 때만 채운다.")]
