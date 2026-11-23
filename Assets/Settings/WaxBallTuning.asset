@@ -27,7 +27,7 @@ MonoBehaviour:
   maxRadiusDegrees: 55
   pressureDamageRate: 0.03
   kneadDamageGain: 0.4
-  kneadAmountPerStamp: 13.5
+  kneadAmountPerStamp: 20
   spreadDegreesPerKnead: 2
   maxSpreadDegrees: 10
   rebindAngleDegrees: 25

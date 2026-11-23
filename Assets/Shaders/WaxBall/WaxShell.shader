@@ -54,7 +54,7 @@ Shader "WaxBall/WaxShell"
         _PieceInset("Piece Inset (남는 조각이 가장자리에서 줄어든 폭, 클수록 작은 조각)", Range(0.005, 0.08)) = 0.03
 
         [Header(Edge and Clay)]
-        _RimWidth("Rim Width (판 가장자리 밝은 테두리)", Range(0, 0.1)) = 0.03
+        _RimWidth("Rim Width (판 가장자리 밝은 테두리, 얇게)", Range(0, 0.1)) = 0.012
         _RimBrightness("Rim Brightness", Range(0, 1)) = 0.45
         _BulgeStrength("Clay Bulge (틈 가장자리 음영, 표면 요철처럼 보이므로 작게)", Range(0, 1.5)) = 0.1
         _MinPixelWidth("Min Pixel Width (선 최소 굵기, px)", Range(0, 3)) = 1
@@ -227,7 +227,8 @@ Shader "WaxBall/WaxShell"
 
                 Gap gap;
                 gap.cover = (1.0 - smoothstep(w - px * 0.5, w + px * 0.5, d)) * inside;
-                gap.rim = (1.0 - smoothstep(w, w + rimW + px, d)) * inside * (1.0 - gap.cover);
+                // 테두리는 번지지 않고 또렷하게 끊기는 얇은 띠(1px 안티에일리어싱만)로 그린다. 부드럽게 줄어들면 흰 선이 빛나 보인다.
+                gap.rim = (1.0 - smoothstep(w + rimW - px * 0.5, w + rimW + px * 0.5, d)) * inside * (1.0 - gap.cover);
                 gap.cavity = saturate((d / max(w, 1e-4) - 0.35) / 0.65) * gap.cover;
                 gap.shift = dirAway * saturate(d / max(w, 1e-4)) * gap.cover;
                 return gap;
