@@ -50,7 +50,9 @@ namespace Interaction
             {
                 if (markers[i] == null) continue;
 
-                bool tracked = showMarkers && TryGetFingertip((WaxFinger)i, out FingertipSample sample) && sample.tracked;
+                // && 단축 평가로 sample이 채워지지 않을 수 있어서 따로 부른다.
+                FingertipSample sample = default;
+                bool tracked = showMarkers && TryGetFingertip((WaxFinger)i, out sample) && sample.tracked;
                 markers[i].gameObject.SetActive(tracked);
                 if (!tracked) continue;
 
