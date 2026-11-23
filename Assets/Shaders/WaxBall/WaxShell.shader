@@ -3,7 +3,7 @@
 // - Idle/Pressed: 매끈한 단색 공. 균열 없음.
 // - Cracked(_CrackAmounts): 판은 그대로이고 삐뚤빼뚤한 균열 두 줄을 따라 흰 점토가 불룩하게 비집고 나온다.
 //   균열의 시작점, 방향, 길이, 휘어짐은 C#(WaxBallShellVisual)이 리셋마다 무작위로 넣는다(_Crack1A/B, _Crack2A/B).
-// - 접촉점을 쓰면(_LocalDamage = 1) Broken과 Mixed의 판 갈라짐이 손가락이 누른 자리(_Stamps) 주변에서 시작해 번져 나가고,
+// - 접촉점을 쓰면(_LocalDamage = 1) Broken과 Mixed의 판 갈라짐이 손가락이 누른 자리 주변의 판부터 깨지고(판별 상태는 C#이 _CellTex에 적는다),
 //   MixProgress가 커질수록 공 전체로 퍼진다. 접촉점을 쓰지 않으면 공 전체가 깨진다.
 // - Broken(_BrokenAmount, _Fragment): 큰 판 몇 개로 갈라지고 틈은 흰 점토 색이다.
 //   _Fragment가 커질수록 큰 판 안에 작은 판 경계가 하나씩 생겨 더 잘게 쪼개진다.
@@ -105,11 +105,9 @@ Shader "WaxBall/WaxShell"
                 float4 _DentDir;
                 float _DentAmount;
                 float _LocalDamage;
-                float4 _Stamps[8];
                 float _MixAmount;
                 float _MixFill;
                 float _FragmentKnead;
-                float _StampMix[8];
                 float _PieceFraction;
                 float _PieceInset;
                 float _RimWidth;
@@ -157,8 +155,6 @@ Shader "WaxBall/WaxShell"
                 float cellHash;  // 가장 가까운 셀의 무작위 값(Mixed에서 어떤 판이 남는지 정한다)
                 float cellHash2; // 두 번째 무작위 값(조각 크기, 사라지는 시점)
                 float3 grad;     // 셀1 → 셀2 방향
-                float3 site1;    // 가장 가까운 셀의 중심(스케일된 공간). 방향만 쓰면 파손 영향을 셀 단위로 계산할 수 있다.
-                float3 site2;    // 두 번째로 가까운 셀(경계 건너편)의 중심
                 float cellHashB; // 두 번째 셀의 무작위 값(cellHash와 같은 식)
                 float3 id1;      // 가장 가까운 셀의 격자 좌표(정수 값). 판 번호 표(_CellTex)의 칸을 정한다.
                 float3 id2;      // 두 번째 셀의 격자 좌표
@@ -226,9 +222,6 @@ Shader "WaxBall/WaxShell"
                 result.cellHash = IntHash3((int3)round(id1) + int3(37, 91, 53)).x;
                 result.cellHash2 = Hash1(id1 * 2.71 + 5.3);
                 result.grad = normalize(v2 - v1 + 1e-5);
-                // diff = id + 무작위 오프셋 - local 이므로 셀 중심 = p + diff
-                result.site1 = p + v1;
-                result.site2 = p + v2;
                 result.cellHashB = IntHash3((int3)round(id2) + int3(37, 91, 53)).x;
                 result.id1 = id1;
                 result.id2 = id2;
@@ -321,38 +314,30 @@ Shader "WaxBall/WaxShell"
                 return MakeGap(d, px, w, inside, rimW, normalize(away + 1e-5));
             }
 
-            // 셀 중심(site) 방향에서 본 파손 영향(0~1)과 섞임(0~1). 흔적은 (방향 xyz, 반경의 코사인)이고 빈 칸은 코사인이 2다.
-            // 파손은 픽셀이 아니라 셀 중심 하나로 정해서, 판이 통째로 깨지거나 통째로 멀쩡하다(경계는 항상 판 테두리).
-            // 접촉점을 쓰지 않으면(_LocalDamage = 0) 모든 셀이 영향 1이고 섞임은 _MixAmount 하나다.
-            // 접촉점을 쓰면 섞임은 흔적마다 주무른 양을 따르고, _MixFill이 커지면 남은 부분도 채운다.
-            float CellInfluence(float3 site, out float cellMix)
+            // 판이 깨진 정도(0~1). 판마다 문턱(cellHash)이 달라서 영향이 큰 판부터 하나씩 깨진다.
+            // influence는 접촉점을 쓰지 않을 때 1이고, 접촉점을 쓸 때는 C#이 같은 식으로 계산해 표에 적는다(여기서는 _MixFill에만 쓴다).
+            float CellBroken(float influence, float cellHash)
+            {
+                return saturate((influence * _BrokenAmount - (0.15 + 0.7 * cellHash)) * 6.0);
+            }
+
+            // 큰 판 하나의 깨짐(0~1)과 섞임(0~1). 접촉점을 쓰지 않으면(_LocalDamage = 0) 모든 판이 _BrokenAmount를 따라 하나씩 깨지고 섞임은 _MixAmount 하나다.
+            // 접촉점을 쓰면 C#(WaxBallDamage)이 판 번호 표(_CellTex)에 적어 둔 값을 읽는다. R: 깨짐, G: 섞임.
+            // _MixFill이 커지면 남은 판도 채워서 Mixed 직전에 표면 전체가 덮인다.
+            // 판 번호는 격자 좌표 하나로 정한다: (x+4) + 8*(y+4) + 64*(z+4). WaxBallCellMap과 같은 식이다.
+            float PlateBroken(float3 id, float cellHash, out float cellMix)
             {
                 if (_LocalDamage < 0.5)
                 {
                     cellMix = _MixAmount;
-                    return 1.0;
+                    return CellBroken(1.0, cellHash);
                 }
 
-                float3 dir = normalize(site);
-                float influence = 0.0;
-                cellMix = 0.0;
-                for (int i = 0; i < 8; i++)
-                {
-                    float4 stamp = _Stamps[i];
-                    float inner = lerp(stamp.w, 1.0, 0.45);
-                    float t = saturate((dot(dir, stamp.xyz) - stamp.w) / max(inner - stamp.w, 1e-4));
-                    influence = max(influence, t * t * (3.0 - 2.0 * t));
-                    cellMix = max(cellMix, _StampMix[i] * saturate(t * 3.0));
-                }
-                cellMix = max(cellMix, _MixFill);
-                return max(influence, _MixFill);
-            }
-
-            // 판이 깨진 정도(0~1). 판마다 문턱(cellHash)이 달라서 손가락에 가까운 판부터 하나씩 깨지고,
-            // _BrokenAmount가 올라가는 동안 깨진 판이 손가락에서 바깥으로 번진다.
-            float CellBroken(float influence, float cellHash)
-            {
-                return saturate((influence * _BrokenAmount - (0.15 + 0.7 * cellHash)) * 6.0);
+                int3 cell = clamp((int3)round(id) + 4, 0, 7);
+                uint slot = (uint)(cell.x + 8 * cell.y + 64 * cell.z);
+                float2 state = LOAD_TEXTURE2D(_CellTex, int2(slot & 31u, slot >> 5u)).rg;
+                cellMix = max(state.y, _MixFill);
+                return max(state.x, CellBroken(_MixFill, cellHash));
             }
 
 #if defined(_DEBUG_CELLS)
@@ -436,8 +421,8 @@ Shader "WaxBall/WaxShell"
 
                 // 큰 판 두 개(이 픽셀의 판 A, 경계 건너편 판 B)의 파손과 섞임. 틈은 둘 중 하나라도 깨졌을 때 생긴다.
                 float mixA, mixB;
-                float brokenA = CellBroken(CellInfluence(plateCells.site1, mixA), plateCells.cellHash);
-                float brokenB = CellBroken(CellInfluence(plateCells.site2, mixB), plateCells.cellHashB);
+                float brokenA = PlateBroken(plateCells.id1, plateCells.cellHash, mixA);
+                float brokenB = PlateBroken(plateCells.id2, plateCells.cellHashB, mixB);
                 float plateGate = max(brokenA, brokenB);
 
                 // 작은 판 경계는 이 픽셀의 큰 판이 깨져 있고, 그 판의 섞임(주무른 양)이 문턱을 넘은 곳에만 나타난다.

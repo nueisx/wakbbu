@@ -5,7 +5,7 @@ namespace WaxBall
     /// <summary>
     /// 왁스 껍질 시각 효과. 구조는 투명 고무층 > 왁스 껍질 > 흰 점토이고, 파편은 고무층 안에 갇혀 밖으로 튀지 않는다.
     /// grip에 따른 찌그러짐, 균열(_CrackAmounts), 파열(_BrokenAmount, _Fragment), 섞임(_MixAmount)을 셰이더에 넘긴다.
-    /// 접촉점을 쓰는 씬(WaxBallDamage.LocalMode)에서는 파손 흔적 주변만 깨지고, 균열은 손가락 아래에서 시작한다.
+    /// 접촉점을 쓰는 씬(WaxBallDamage.LocalMode)에서는 손가락이 누른 자리 근처의 판만 깨지고(판별 상태는 WaxBallDamage가 판 표 텍스처에 적는다), 균열은 손가락 아래에서 시작한다.
     /// 접촉점을 쓰지 않는 씬(Slider만 사용)에서는 공 전체가 깨지고, 균열의 시작점은 리셋(Idle)마다 무작위로 바뀐다.
     /// 균열의 방향, 길이, 휘어짐은 어느 경우든 리셋마다 무작위로 바뀐다.
     /// 이벤트와 Grip/MixProgress 프로퍼티를 읽기만 하고 상태 판정은 하지 않는다.
@@ -41,10 +41,8 @@ namespace WaxBall
 
         private static readonly int CrackAmountsId = Shader.PropertyToID("_CrackAmounts");
         private static readonly int LocalDamageId = Shader.PropertyToID("_LocalDamage");
-        private static readonly int StampsId = Shader.PropertyToID("_Stamps");
         private static readonly int BrokenAmountId = Shader.PropertyToID("_BrokenAmount");
         private static readonly int FragmentId = Shader.PropertyToID("_Fragment");
-        private static readonly int StampMixId = Shader.PropertyToID("_StampMix");
         private static readonly int MixFillId = Shader.PropertyToID("_MixFill");
         private static readonly int FragmentKneadId = Shader.PropertyToID("_FragmentKnead");
         private static readonly int MixAmountId = Shader.PropertyToID("_MixAmount");
@@ -73,8 +71,6 @@ namespace WaxBall
         private Vector4 crack1A, crack1B, crack2A, crack2B;
         private bool startsOverridden;
         private WaxBallCellMap cellMap;
-        private readonly Vector4[] stamps = new Vector4[WaxBallDamage.MaxStamps];
-        private readonly float[] stampMix = new float[WaxBallDamage.MaxStamps];
 
         private void Awake()
         {
@@ -184,7 +180,7 @@ namespace WaxBall
             // 주물러서 쌓인 양(MixProgress)이 늘수록 판이 점점 잘게 쪼개지고, 쥐는 힘은 조금만 거든다.
             // 한 번 쪼개진 판은 다시 합쳐지지 않는다.
             float gripFactor = Mathf.InverseLerp(stateMachine.BreakThreshold, 1f, stateMachine.Grip);
-            // 접촉점 씬은 주무른 양 몫을 셰이더가 흔적마다 더하므로 여기서는 뺀다.
+            // 접촉점 씬은 주무른 양 몫을 셰이더가 판마다 더하므로 여기서는 뺀다.
             bool local = damage != null && damage.LocalMode;
             float kneadPart = local ? 0f : fragmentKneadWeight * stateMachine.MixProgress;
             float target = Mathf.Clamp01(fragmentBase + fragmentGripWeight * gripFactor + kneadPart);
@@ -217,10 +213,6 @@ namespace WaxBall
                 if (damage.TryGetCrackAnchor(1, out Vector3 anchor2))
                     a2 = new Vector4(anchor2.x, anchor2.y, anchor2.z, crack2A.w);
                 else amount2 = 0f;
-
-                damage.FillShaderStamps(stamps, stampMix);
-                block.SetVectorArray(StampsId, stamps);
-                block.SetFloatArray(StampMixId, stampMix);
 
                 // 깨진 면적이 기준 이상이고 평균 섞임이 Mixed에 가까울 때만 남은 부분까지 채운다.
                 float progress = Mathf.Clamp01(stateMachine.MixProgress / stateMachine.MixAverageThreshold);

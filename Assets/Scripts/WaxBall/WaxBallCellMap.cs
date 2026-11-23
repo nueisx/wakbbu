@@ -47,10 +47,14 @@ namespace WaxBall
 
         public int UsedCount { get; private set; }
 
+        /// <summary>Rebuild 횟수. 판 배치가 바뀌면(판 번호가 달라지면) 늘어난다. 판별 상태를 들고 있는 쪽이 이 값이 바뀌면 상태를 지운다.</summary>
+        public int Version { get; private set; }
+
         /// <summary>판 목록과 텍스처를 (다시) 만든다. plateScale은 머티리얼의 _PlateScale이다.</summary>
         public void Rebuild(float plateScale)
         {
             PlateScale = plateScale;
+            Version++;
 
             var counts = new int[SlotCount];
             for (int i = 0; i < SlotCount; i++)
@@ -102,6 +106,23 @@ namespace WaxBall
                     hideFlags = HideFlags.HideAndDontSave
                 };
             }
+            Texture.SetPixels(pixels);
+            Texture.Apply(false);
+        }
+
+        /// <summary>판 하나의 깨짐(R)과 섞임(G)을 적는다. 값이 바뀌었으면 true. 텍스처에는 Apply()를 불러야 올라간다.</summary>
+        public bool SetState(int slot, float broken, float mix)
+        {
+            Color pixel = pixels[slot];
+            if (Mathf.Approximately(pixel.r, broken) && Mathf.Approximately(pixel.g, mix)) return false;
+            pixel.r = broken;
+            pixel.g = mix;
+            pixels[slot] = pixel;
+            return true;
+        }
+
+        public void Apply()
+        {
             Texture.SetPixels(pixels);
             Texture.Apply(false);
         }
