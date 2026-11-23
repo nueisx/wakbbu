@@ -11,19 +11,24 @@ using WaxBall;
 /// Quest 실기기용 왁뿌볼 테스트 씬(Dev_WaxBallQuest.unity)을 만든다.
 /// 패스스루가 켜진 Dev_QuestBuildTest 씬을 바탕으로 큐브 대신 왁뿌볼을 눈앞 35cm에 둔다.
 /// grip은 오른손 컨트롤러 트리거, 리셋은 A 버튼이고, 디버그 텍스트는 공 옆 월드 공간에 작게 띄운다.
+/// 맨손 핸드트래킹용으로 양손에 손 뼈대 표시(OVRHandPrefab의 OVRSkeletonRenderer)를 붙이고, 오른손 엄지·검지·중지 끝에 표시 구를 띄운다.
+/// 손가락 끝 위치는 QuestHandFingertips 어댑터가 읽는다(접촉점 입력으로의 변환은 아직 없다).
 /// 에디터용 Slider 씬(dev_waxball)은 건드리지 않는다.
 /// </summary>
 public static class WaxBallQuestSceneBuilder
 {
     private const string SourceScenePath = "Assets/Scenes/Dev_QuestBuildTest.unity";
     private const string TargetScenePath = "Assets/Scenes/Dev_WaxBallQuest.unity";
+    private const string HandPrefabPath = "Packages/com.meta.xr.sdk.core/Prefabs/OVRHandPrefab.prefab";
+    private const string MarkerMaterialPath = "Assets/Materials/FingertipMarker.mat";
+    private const float MarkerDiameter = 0.012f;
 
     private const float BallDiameter = 0.07f;
     private const float BallDistance = 0.35f;
 
     // 디버그 텍스트: 캔버스 한 변 픽셀과 월드 크기(m/픽셀). 500px x 0.0003 = 15cm.
     private const float CanvasScale = 0.0003f;
-    private static readonly Vector2 CanvasSize = new Vector2(500f, 300f);
+    private static readonly Vector2 CanvasSize = new Vector2(500f, 430f);
     private const float CanvasOffsetX = 0.12f;
 
     [MenuItem("WaxBall/Create Quest WaxBall Scene")]
@@ -41,14 +46,15 @@ public static class WaxBallQuestSceneBuilder
         var scene = EditorSceneManager.OpenScene(TargetScenePath, OpenSceneMode.Single);
 
         // 큐브와 포스트 프로세싱(Quest 성능)을 지우고, 여러 번 실행해도 중복되지 않게 이전 결과도 지운다.
-        foreach (var name in new[] { "Cube", "Global Volume", "WaxBall", "WaxBallDebug", "QuestInput", "FakeFingers" })
+        foreach (var name in new[] { "Cube", "Global Volume", "WaxBall", "WaxBallDebug", "QuestInput", "FakeFingers", "HandFingertips" })
             DestroyAllNamed(name);
 
         var ball = CreateBall(out WaxBallStateMachine machine, out WaxBallContacts contacts, out WaxBallDamage damage);
         WaxBallTuningTools.AssignToOpenScene();
         CreateInput(machine);
         CreateFakeFingersInactive(ball.transform, contacts, machine);
-        CreateDebugCanvas(ball.transform, machine, damage);
+        var fingertips = CreateHandTracking();
+        CreateDebugCanvas(ball.transform, machine, damage, fingertips);
 
         AddToBuildSettings();
 
@@ -95,7 +101,97 @@ public static class WaxBallQuestSceneBuilder
         if (fakeFingers != null) fakeFingers.SetActive(false);
     }
 
-    private static void CreateDebugCanvas(Transform ball, WaxBallStateMachine machine, WaxBallDamage damage)
+    // 양손 뼈대 표시와 오른손 손가락 끝 표시. 손 모양(메시)은 끄고 뼈대만 보인다(패스스루의 실제 손과 겹쳐 가리지 않게).
+    private static QuestHandFingertips CreateHandTracking()
+    {
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(HandPrefabPath);
+        if (prefab == null)
+        {
+            Debug.LogError(HandPrefabPath + " 를 찾지 못했다. Meta XR Core SDK가 설치되어 있는지 확인한다.");
+            return null;
+        }
+
+        AddHand(prefab, "LeftHandAnchor", "LeftHandTracking", OVRHand.Hand.HandLeft);
+        var right = AddHand(prefab, "RightHandAnchor", "RightHandTracking", OVRHand.Hand.HandRight);
+        if (right == null) return null;
+
+        var root = new GameObject("HandFingertips");
+        var tracker = root.AddComponent<QuestHandFingertips>();
+        WaxBallDevSceneBuilder.SetRef(tracker, "hand", right.GetComponent<OVRHand>());
+        WaxBallDevSceneBuilder.SetRef(tracker, "skeleton", right.GetComponent<OVRSkeleton>());
+
+        var material = LoadOrCreateMarkerMaterial();
+        var serialized = new SerializedObject(tracker);
+        var markers = serialized.FindProperty("markers");
+        markers.arraySize = WaxBallStateMachine.FingerCount;
+        for (int i = 0; i < WaxBallStateMachine.FingerCount; i++)
+        {
+            var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            marker.name = "Tip" + (WaxFinger)i;
+            Object.DestroyImmediate(marker.GetComponent<Collider>());
+            marker.transform.SetParent(root.transform, false);
+            marker.transform.localScale = Vector3.one * MarkerDiameter;
+            if (material != null) marker.GetComponent<Renderer>().sharedMaterial = material;
+            markers.GetArrayElementAtIndex(i).objectReferenceValue = marker.transform;
+        }
+        serialized.ApplyModifiedProperties();
+        return tracker;
+    }
+
+    // 카메라 리그의 손 앵커 아래에 OVRHandPrefab을 넣고 왼손/오른손을 정한다. 다시 실행하면 이전 것을 지우고 새로 넣는다.
+    private static GameObject AddHand(GameObject prefab, string anchorName, string handName, OVRHand.Hand handType)
+    {
+        Transform anchor = null;
+        foreach (var t in Object.FindObjectsOfType<Transform>(true))
+        {
+            if (t.name == handName) Object.DestroyImmediate(t.gameObject);
+        }
+        foreach (var t in Object.FindObjectsOfType<Transform>(true))
+        {
+            if (t.name == anchorName) { anchor = t; break; }
+        }
+        if (anchor == null)
+        {
+            Debug.LogError(anchorName + " 를 찾지 못했다. 씬에 카메라 리그(OVRCameraRig)가 있는지 확인한다.");
+            return null;
+        }
+
+        var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, anchor);
+        instance.name = handName;
+        instance.transform.localPosition = Vector3.zero;
+        instance.transform.localRotation = Quaternion.identity;
+
+        var hand = new SerializedObject(instance.GetComponent<OVRHand>());
+        hand.FindProperty("HandType").intValue = (int)handType;
+        hand.ApplyModifiedProperties();
+
+        var skeletonRenderer = instance.GetComponent<OVRSkeletonRenderer>();
+        if (skeletonRenderer != null) skeletonRenderer.enabled = true;
+        var meshRenderer = instance.GetComponent<OVRMeshRenderer>();
+        if (meshRenderer != null) meshRenderer.enabled = false;
+        var skinned = instance.GetComponent<SkinnedMeshRenderer>();
+        if (skinned != null) skinned.enabled = false;
+        return instance;
+    }
+
+    private static Material LoadOrCreateMarkerMaterial()
+    {
+        var material = AssetDatabase.LoadAssetAtPath<Material>(MarkerMaterialPath);
+        if (material != null) return material;
+
+        var shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null)
+        {
+            Debug.LogError("Universal Render Pipeline/Unlit 셰이더를 찾지 못했다.");
+            return null;
+        }
+
+        material = new Material(shader);
+        AssetDatabase.CreateAsset(material, MarkerMaterialPath);
+        return material;
+    }
+
+    private static void CreateDebugCanvas(Transform ball, WaxBallStateMachine machine, WaxBallDamage damage, QuestHandFingertips fingertips)
     {
         var canvasGo = new GameObject("WaxBallDebug", typeof(Canvas));
         canvasGo.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
@@ -125,6 +221,7 @@ public static class WaxBallQuestSceneBuilder
         WaxBallDevSceneBuilder.SetRef(debugText, "stateMachine", machine);
         WaxBallDevSceneBuilder.SetRef(debugText, "label", label);
         WaxBallDevSceneBuilder.SetRef(debugText, "damage", damage);
+        if (fingertips != null) WaxBallDevSceneBuilder.SetRef(debugText, "fingertips", fingertips);
         var showFps = new SerializedObject(debugText);
         showFps.FindProperty("showFps").boolValue = true;
         showFps.ApplyModifiedProperties();

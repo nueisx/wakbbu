@@ -15,6 +15,7 @@ Unity / AR 구현 세부 안내서다. 팀 전체 개요, 상태 흐름, 이벤�
 | `WaxBall/WaxFinger.cs` | `enum WaxFinger { Thumb, Index, Middle }` (WEART TouchDIVER G1이 지원하는 세 손가락) |
 | `WaxBall/WaxBallContacts.cs` | 손가락 접촉점 입력 API(세 손가락, 위치 + 세기). 장비 의존 없음. 전체 grip 합치기(최댓값/평균) |
 | `../Interaction/QuestControllerInput.cs` | Quest 컨트롤러 입력 어댑터(오른손 트리거 0~1 → `SetGrip`, A 버튼 → 리셋) |
+| `../Interaction/QuestHandFingertips.cs`, `IFingertipSource.cs` | Quest 맨손 핸드트래킹에서 엄지·검지·중지 끝 위치와 손가락별 신뢰도를 읽는 어댑터와, 손가락 끝 위치를 주는 입력의 공통 모양(`IFingertipSource`, 나중에 장갑 tracking도 같은 모양으로 구현). 읽기만 하고 `SetContact`는 아직 부르지 않는다 |
 | `../Interaction/FaceHeadset.cs` | 월드 공간 UI(디버그 텍스트)가 헤드셋을 향하게 함 |
 | `Assets/Editor/WaxBallQuestSceneBuilder.cs` | 메뉴 `WaxBall > Create Quest WaxBall Scene`으로 Quest용 씬(`Dev_WaxBallQuest`)을 만듦 |
 | `../Interaction/FakeFingerContacts.cs` | 에디터 테스트용 가짜 손가락 3개(Scene 뷰에서 드래그, 세기는 Slider grip). 기본 배치는 세 손가락으로 집는 모양(엄지가 검지·중지 반대편) |
@@ -171,6 +172,7 @@ Mixed 구현: 작은 판(Voronoi 셀)마다 무작위 값을 둔다. 셀의 `Pie
 - **디버그 텍스트**는 공 오른쪽 12cm에 월드 공간으로 작게(15cm 폭, 글자 약 9mm) 뜨고 헤드셋을 향한다. 상태, grip, 섞임, Crunch, 깨진 판 수, FPS를 표시한다.
 - 접촉점 입력이 없으므로 기본은 **공 전체가 깨지는 방식**(셰이더가 가장 무거운 경우)이다. 가짜 손가락(`FakeFingers`)은 꺼 두었다. 켜면 고정된 세 손가락 자리 주변에서만 깨지는 접촉점 방식을 Quest에서 볼 수 있다.
 - 큐브와 `Global Volume`(포스트 프로세싱)은 지웠다. 이 씬을 만들면 Build Settings에서 이 씬만 켜진다.
+- **핸드트래킹(맨손, 장갑 없이)**: 프로젝트 설정 `Assets/Oculus/OculusProjectConfig.asset`의 `handTrackingSupport`는 `ControllersAndHands`(1)다(빌드 때 `HAND_TRACKING` 권한이 매니페스트에 들어간다). 씬 빌더가 양손 앵커(`LeftHandAnchor`, `RightHandAnchor`) 아래에 `OVRHandPrefab`을 넣고 뼈대 표시(`OVRSkeletonRenderer`)만 켠다(손 메시는 꺼서 패스스루의 실제 손을 가리지 않는다). 오른손 엄지(빨강)·검지(초록)·중지(파랑) 끝에 지름 1.2cm 구가 뜨고, 신뢰도가 낮으면 회색, 추적이 끊기면 사라진다. 디버그 텍스트에 `Hand`(추적 여부, 손 전체 신뢰도), `Tips`(손가락별 H/L/-), `Gap`(엄지에서 검지·중지 끝까지 cm)이 나온다. 컨트롤러를 내려놓으면 시스템이 손 추적으로 바꾸고, 이때는 트리거와 A 버튼이 없어 grip과 리셋이 동작하지 않는다(접촉점 연결은 다음 단계). 헤드셋 설정에서 핸드트래킹이 켜져 있어야 한다.
 
 **양쪽 눈 확인 (Multiview)**: Quest는 Multiview로 양쪽 눈을 한 번에 그린다. 커스텀 셰이더에는 스테레오 인스턴싱 매크로가 필수이고 `WaxShell.shader`에 넣어 두었다(없으면 한쪽 눈이 비거나 양쪽이 같은 그림이 된다). 새 셰이더를 만들 때도 같은 매크로를 넣는다. 확인은 헤드셋을 쓰고 공을 가까이 본 채 한쪽 눈씩 번갈아 감아서, 두 눈에 같은 위치와 균열이 보이고 입체감이 있는지, 깜빡이거나 이중으로 보이는지 본다.
 

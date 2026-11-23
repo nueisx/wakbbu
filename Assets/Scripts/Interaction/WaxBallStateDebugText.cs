@@ -11,6 +11,8 @@ namespace Interaction
         [SerializeField] private TMP_Text label;
         [Tooltip("선택 사항. 비워 두면 같은 공에서 자동으로 찾는다. 연결하면 파손 흔적 수와 균열이 붙은 손가락을 표시한다.")]
         [SerializeField] private WaxBallDamage damage;
+        [Tooltip("선택 사항. 비워 두면 씬에서 자동으로 찾는다. 연결하면 손 추적 상태와 손가락별 신뢰도, 손가락 끝 사이 거리를 표시한다.")]
+        [SerializeField] private QuestHandFingertips fingertips;
         [Tooltip("켜면 FPS와 프레임 간격(ms)을 표시한다. 화면 주사율 기준이라 GPU 여유는 OVR Metrics Tool로 따로 본다.")]
         [SerializeField] private bool showFps;
 
@@ -24,6 +26,7 @@ namespace Interaction
         {
             // 연결이 빠져 있어도 같은 공의 WaxBallDamage를 찾아 파손 줄을 표시한다.
             if (damage == null && stateMachine != null) damage = stateMachine.GetComponent<WaxBallDamage>();
+            if (fingertips == null) fingertips = FindObjectOfType<QuestHandFingertips>();
         }
 
         private void OnEnable()
@@ -56,6 +59,30 @@ namespace Interaction
             lastCrunchStrength = strength;
         }
 
+        // 손 추적 줄. 손가락별 신뢰도는 H(높음) / L(낮음) / -(추적 안 됨), 거리는 엄지 끝에서 검지·중지 끝까지(cm).
+        private string HandText()
+        {
+            fingertips.TryGetFingertip(WaxFinger.Thumb, out FingertipSample thumb);
+            fingertips.TryGetFingertip(WaxFinger.Index, out FingertipSample index);
+            fingertips.TryGetFingertip(WaxFinger.Middle, out FingertipSample middle);
+
+            string hand = fingertips.HandTracked ? $"tracked, {(fingertips.HandHighConfidence ? "High" : "Low")}" : "lost";
+            return $"\nHand: {hand}\nTips: T {Confidence(thumb)}  I {Confidence(index)}  M {Confidence(middle)}"
+                 + $"\nGap: T-I {Gap(thumb, index)} cm, T-M {Gap(thumb, middle)} cm";
+        }
+
+        private static string Confidence(FingertipSample sample)
+        {
+            if (!sample.tracked) return "-";
+            return sample.highConfidence ? "H" : "L";
+        }
+
+        private static string Gap(FingertipSample a, FingertipSample b)
+        {
+            if (!a.tracked || !b.tracked) return "-";
+            return $"{Vector3.Distance(a.worldPosition, b.worldPosition) * 100f:0.0}";
+        }
+
         private void Update()
         {
             while (crunchTimes.Count > 0 && Time.unscaledTime - crunchTimes.Peek() > 1f) crunchTimes.Dequeue();
@@ -67,6 +94,8 @@ namespace Interaction
                 string crack2 = damage.Crack2Finger.HasValue ? damage.Crack2Finger.Value.ToString() : "-";
                 text += $"\nDamage: {(damage.LocalMode ? "Local" : "Global")}, {damage.BrokenCellCount}/{damage.CellCount} plates\nDamaged: {(damage.LocalMode ? $"{damage.DamagedRatio:P0}" : "Global")}\nCracks: {crack1} / {crack2}";
             }
+
+            if (fingertips != null) text += HandText();
 
             if (showFps)
             {
