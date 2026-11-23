@@ -13,6 +13,10 @@ namespace Interaction
         [SerializeField] private WaxBallDamage damage;
         [Tooltip("선택 사항. 비워 두면 씬에서 자동으로 찾는다. 연결하면 손 추적 상태와 손가락별 신뢰도, 손가락 끝 사이 거리를 표시한다.")]
         [SerializeField] private QuestHandFingertips fingertips;
+        [Tooltip("선택 사항. 비워 두면 씬에서 자동으로 찾는다. 연결하면 필터 결과로 손가락 끝 거리를 보여 주고 거른 프레임 수를 표시한다.")]
+        [SerializeField] private FilteredFingertips filtered;
+        [Tooltip("선택 사항. 비워 두면 씬에서 자동으로 찾는다. 연결하면 CSV 기록 상태와 지금 해야 할 동작을 표시한다.")]
+        [SerializeField] private FingertipRecorder recorder;
         [Tooltip("켜면 FPS와 프레임 간격(ms)을 표시한다. 화면 주사율 기준이라 GPU 여유는 OVR Metrics Tool로 따로 본다.")]
         [SerializeField] private bool showFps;
 
@@ -27,6 +31,8 @@ namespace Interaction
             // 연결이 빠져 있어도 같은 공의 WaxBallDamage를 찾아 파손 줄을 표시한다.
             if (damage == null && stateMachine != null) damage = stateMachine.GetComponent<WaxBallDamage>();
             if (fingertips == null) fingertips = FindObjectOfType<QuestHandFingertips>();
+            if (filtered == null) filtered = FindObjectOfType<FilteredFingertips>();
+            if (recorder == null) recorder = FindObjectOfType<FingertipRecorder>();
         }
 
         private void OnEnable()
@@ -59,7 +65,9 @@ namespace Interaction
             lastCrunchStrength = strength;
         }
 
-        // 손 추적 줄. 손가락별 신뢰도는 H(높음) / L(낮음) / -(추적 안 됨), 거리는 엄지 끝에서 검지·중지 끝까지(cm).
+        // 손 추적 줄. 손가락별 신뢰도는 H(높음) / L(낮음) / -(추적 안 됨).
+        // Gap은 엄지 끝에서 검지·중지 끝까지의 거리(cm)이고, 필터가 있으면 원본(r)과 필터 결과(f)를 같이 보여 준다.
+        // Rej는 필터가 튄 값으로 보고 거른 프레임 수(엄지, 검지, 중지).
         private string HandText()
         {
             fingertips.TryGetFingertip(WaxFinger.Thumb, out FingertipSample thumb);
@@ -67,8 +75,18 @@ namespace Interaction
             fingertips.TryGetFingertip(WaxFinger.Middle, out FingertipSample middle);
 
             string hand = fingertips.HandTracked ? $"tracked, {(fingertips.HandHighConfidence ? "High" : "Low")}" : "lost";
-            return $"\nHand: {hand}\nTips: T {Confidence(thumb)}  I {Confidence(index)}  M {Confidence(middle)}"
-                 + $"\nGap: T-I {Gap(thumb, index)} cm, T-M {Gap(thumb, middle)} cm";
+            string text = $"\nHand: {hand}\nTips: T {Confidence(thumb)}  I {Confidence(index)}  M {Confidence(middle)}";
+
+            if (filtered == null)
+                return text + $"\nGap: T-I {Gap(thumb, index)} cm, T-M {Gap(thumb, middle)} cm";
+
+            filtered.TryGetFingertip(WaxFinger.Thumb, out FingertipSample fThumb);
+            filtered.TryGetFingertip(WaxFinger.Index, out FingertipSample fIndex);
+            filtered.TryGetFingertip(WaxFinger.Middle, out FingertipSample fMiddle);
+            text += $"\nGap T-I: r {Gap(thumb, index)} f {Gap(fThumb, fIndex)} cm\nGap T-M: r {Gap(thumb, middle)} f {Gap(fThumb, fMiddle)} cm";
+            text += $"\nRej: T {filtered.RejectedCount(WaxFinger.Thumb)} I {filtered.RejectedCount(WaxFinger.Index)} M {filtered.RejectedCount(WaxFinger.Middle)}";
+            if (recorder != null) text += "\n" + recorder.StatusText;
+            return text;
         }
 
         private static string Confidence(FingertipSample sample)

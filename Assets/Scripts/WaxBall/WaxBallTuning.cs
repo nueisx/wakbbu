@@ -124,5 +124,30 @@ namespace WaxBall
 
         [Tooltip("오목한 정도가 grip을 따라가는 속도.")]
         [Min(1f)] public float dentFollowSpeed = 12f;
+
+        // ---- 핸드트래킹 ----
+        [Header("핸드트래킹: 공")]
+        [Tooltip("실물 스펀지 공의 지름(m). 가상 공의 지름과 같아야 한다. 스펀지 공을 고르는 중이라 임시로 7cm. 공 중심 계산(2b)에서 쓴다.")]
+        [Range(0.03f, 0.15f)] public float ballDiameter = 0.07f;
+
+        [Header("핸드트래킹: 손가락 끝 필터 (One Euro)")]
+        [Tooltip("손가락 끝이 느리게 움직일 때의 차단 주파수(Hz). 작을수록 가만히 있을 때 덜 떨리지만 따라오는 게 늦다.")]
+        [Min(0.1f)] public float fingertipMinCutoff = 1.5f;
+
+        [Tooltip("손가락 끝이 빠를수록 차단 주파수를 올리는 정도(Hz per m/s). 클수록 빠른 움직임을 지연 없이 따라간다.")]
+        [Min(0f)] public float fingertipBeta = 20f;
+
+        [Tooltip("손가락 신뢰도가 Low일 때 차단 주파수에 곱하는 값. 작을수록 더 강하게 부드럽게 한다.")]
+        [Range(0.05f, 1f)] public float fingertipLowConfidenceScale = 0.5f;
+
+        [Header("핸드트래킹: 튀는 값 거르기")]
+        [Tooltip("손가락 끝이 이 속도(m/s)를 넘게 움직인 프레임은 튄 값으로 보고 직전 위치를 유지한다.")]
+        [Min(0.5f)] public float fingertipMaxSpeed = 3f;
+
+        [Tooltip("두 손가락 끝이 이 거리(m)보다 가까우면 겹친 것으로 보고, 최근에 더 많이 움직인 쪽을 의심 값으로 거른다.")]
+        [Min(0f)] public float fingertipMinSeparation = 0.01f;
+
+        [Tooltip("의심 값이 이 프레임 수 넘게 계속되면 진짜 움직임으로 인정하고 새 위치에서 다시 시작한다(필터가 고착되지 않게).")]
+        [Range(1, 30)] public int fingertipRejectFrames = 6;
     }
 }

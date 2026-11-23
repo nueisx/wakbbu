@@ -42,3 +42,10 @@ MonoBehaviour:
   mixFillStart: 0.85
   dentStrength: 0.5
   dentFollowSpeed: 12
+  ballDiameter: 0.07
+  fingertipMinCutoff: 1.5
+  fingertipBeta: 20
+  fingertipLowConfidenceScale: 0.5
+  fingertipMaxSpeed: 3
+  fingertipMinSeparation: 0.01
+  fingertipRejectFrames: 6

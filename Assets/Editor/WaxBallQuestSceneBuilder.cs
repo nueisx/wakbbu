@@ -22,13 +22,14 @@ public static class WaxBallQuestSceneBuilder
     private const string HandPrefabPath = "Packages/com.meta.xr.sdk.core/Prefabs/OVRHandPrefab.prefab";
     private const string MarkerMaterialPath = "Assets/Materials/FingertipMarker.mat";
     private const float MarkerDiameter = 0.012f;
+    private const float FilteredMarkerDiameter = 0.007f;
 
     private const float BallDiameter = 0.07f;
     private const float BallDistance = 0.35f;
 
     // 디버그 텍스트: 캔버스 한 변 픽셀과 월드 크기(m/픽셀). 500px x 0.0003 = 15cm.
     private const float CanvasScale = 0.0003f;
-    private static readonly Vector2 CanvasSize = new Vector2(500f, 430f);
+    private static readonly Vector2 CanvasSize = new Vector2(500f, 520f);
     private const float CanvasOffsetX = 0.12f;
 
     [MenuItem("WaxBall/Create Quest WaxBall Scene")]
@@ -135,6 +136,29 @@ public static class WaxBallQuestSceneBuilder
             markers.GetArrayElementAtIndex(i).objectReferenceValue = marker.transform;
         }
         serialized.ApplyModifiedProperties();
+
+        // 필터를 거친 손가락 끝(작은 흰 구)과 CSV 기록 도구. 원본은 위 큰 구, 필터 결과는 이 작은 구다.
+        var filtered = root.AddComponent<FilteredFingertips>();
+        WaxBallDevSceneBuilder.SetRef(filtered, "tuning", WaxBallTuningTools.LoadOrCreate());
+        WaxBallDevSceneBuilder.SetRef(filtered, "source", tracker);
+        var filteredSerialized = new SerializedObject(filtered);
+        var filteredMarkers = filteredSerialized.FindProperty("markers");
+        filteredMarkers.arraySize = WaxBallStateMachine.FingerCount;
+        for (int i = 0; i < WaxBallStateMachine.FingerCount; i++)
+        {
+            var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            marker.name = "FilteredTip" + (WaxFinger)i;
+            Object.DestroyImmediate(marker.GetComponent<Collider>());
+            marker.transform.SetParent(root.transform, false);
+            marker.transform.localScale = Vector3.one * FilteredMarkerDiameter;
+            if (material != null) marker.GetComponent<Renderer>().sharedMaterial = material;
+            filteredMarkers.GetArrayElementAtIndex(i).objectReferenceValue = marker.transform;
+        }
+        filteredSerialized.ApplyModifiedProperties();
+
+        var recorder = root.AddComponent<FingertipRecorder>();
+        WaxBallDevSceneBuilder.SetRef(recorder, "filtered", filtered);
+        WaxBallDevSceneBuilder.SetRef(recorder, "hand", tracker);
         return tracker;
     }
 

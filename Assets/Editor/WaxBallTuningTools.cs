@@ -33,7 +33,7 @@ public static class WaxBallTuningTools
         return tuning;
     }
 
-    /// <summary>열려 있는 씬의 상태 머신, 파손 모델, 시각 효과에 설정 파일을 연결한다. 연결한 컴포넌트 수를 돌려준다.</summary>
+    /// <summary>열려 있는 씬의 상태 머신, 파손 모델, 시각 효과, 손가락 끝 필터에 설정 파일을 연결한다. 연결한 컴포넌트 수를 돌려준다.</summary>
     internal static int AssignToOpenScene()
     {
         var tuning = LoadOrCreate();
@@ -41,6 +41,7 @@ public static class WaxBallTuningTools
         count += Assign(Object.FindObjectsOfType<WaxBallStateMachine>(true), tuning);
         count += Assign(Object.FindObjectsOfType<WaxBallDamage>(true), tuning);
         count += Assign(Object.FindObjectsOfType<WaxBallShellVisual>(true), tuning);
+        count += Assign(Object.FindObjectsOfType<Interaction.FilteredFingertips>(true), tuning);
         return count;
     }
 
