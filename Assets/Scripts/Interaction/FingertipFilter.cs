@@ -16,6 +16,12 @@ namespace Interaction
         // 원본이 직전 세 값의 중앙 값에서 이만큼(m) 넘게 벗어났으면 한 프레임짜리 튀는 값으로 보고 센다.
         private const float DespikeDistance = 0.01f;
 
+        // 속도 검사는 프레임 사이에 이 거리(m) 넘게 움직였을 때만 한다(떨림을 짧은 프레임 시간으로 나눠 속도로 착각하지 않게).
+        private const float MinGateDistance = 0.01f;
+
+        // 속도 검사에 쓰는 프레임 시간의 하한(초). 추적 값은 초당 120번보다 자주 갱신되지 않으므로, 에디터처럼 프레임이 아주 빠를 때는 이 값으로 계산한다.
+        private const float MinGateDeltaTime = 1f / 120f;
+
         private Vector3 position;
         private Vector3 velocity;
         private Vector3 lastRaw;
@@ -34,10 +40,10 @@ namespace Interaction
 
         public bool HasValue { get; private set; }
 
-        /// <summary>이번 프레임 원본이 직전 필터 위치에서 속도 제한을 넘게 움직였는가.</summary>
+        /// <summary>이번 프레임 원본이 직전 원본에서 속도 제한을 넘게 움직였는가(프레임 사이 이동 속도).</summary>
         public bool SpeedSuspect { get; private set; }
 
-        /// <summary>이번 프레임 원본이 직전 필터 위치에서 움직인 거리(m).</summary>
+        /// <summary>이번 프레임 원본이 직전 프레임 원본에서 움직인 거리(m).</summary>
         public float Motion { get; private set; }
 
         /// <summary>이번 프레임 원본이 한 프레임짜리 튀는 값이라 중앙 값으로 바꿔 쓴 프레임인가.</summary>
@@ -100,8 +106,10 @@ namespace Interaction
                 return;
             }
 
-            Motion = (raw - position).magnitude;
-            SpeedSuspect = Motion / dt > maxSpeed;
+            // 프레임 사이 이동 거리로 속도를 잰다. 필터 위치와의 거리로 재면 필터가 뒤처진 거리(느리게 움직여도 쌓임)를
+            // 프레임 시간으로 나누게 되어 계속 움직이기만 해도 모든 프레임이 튄 값으로 걸린다.
+            Motion = (raw - lastRaw).magnitude;
+            SpeedSuspect = Motion > MinGateDistance && Motion / Mathf.Max(dt, MinGateDeltaTime) > maxSpeed;
 
             Vector3 rawVelocity = (raw - lastRaw) / dt;
             candidateVelocity = Vector3.Lerp(velocity, rawVelocity, Alpha(DerivativeCutoff, dt));

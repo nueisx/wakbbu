@@ -43,6 +43,10 @@ namespace Interaction
         public int SpeedRejectTotal => speedRejectTotal;
         public int OverlapRejectTotal => overlapRejectTotal;
 
+        /// <summary>가장 최근에 속도 제한으로 거른 프레임의 이동 거리(m)와 프레임 시간(초). 왜 걸렸는지 보려는 진단 값이다.</summary>
+        public float LastSpeedRejectMotion { get; private set; }
+        public float LastSpeedRejectDeltaTime { get; private set; }
+
         private void Awake()
         {
             sourceInterface = source as IFingertipSource;
@@ -112,7 +116,12 @@ namespace Interaction
                 filters[i].Commit(overlap || filters[i].SpeedSuspect, t.fingertipRejectFrames);
                 if (filters[i].Rejected)
                 {
-                    if (filters[i].SpeedSuspect) speedRejectTotal++;
+                    if (filters[i].SpeedSuspect)
+                    {
+                        speedRejectTotal++;
+                        LastSpeedRejectMotion = filters[i].Motion;
+                        LastSpeedRejectDeltaTime = dt;
+                    }
                     else if (overlap) overlapRejectTotal++;
                 }
 

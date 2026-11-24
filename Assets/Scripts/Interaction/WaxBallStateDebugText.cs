@@ -94,6 +94,7 @@ namespace Interaction
         private string FilterText()
         {
             return $"\nRej: T {filtered.RejectedCount(WaxFinger.Thumb)} I {filtered.RejectedCount(WaxFinger.Index)} M {filtered.RejectedCount(WaxFinger.Middle)} (spd {filtered.SpeedRejectTotal}, ovl {filtered.OverlapRejectTotal})"
+                 + (filtered.SpeedRejectTotal > 0 ? $"\nSpd last: {filtered.LastSpeedRejectMotion * 1000f:0.0} mm in {filtered.LastSpeedRejectDeltaTime * 1000f:0.0} ms" : "")
                  + $"\nSpk: T {filtered.DespikedCount(WaxFinger.Thumb)} I {filtered.DespikedCount(WaxFinger.Index)} M {filtered.DespikedCount(WaxFinger.Middle)}";
         }
 
