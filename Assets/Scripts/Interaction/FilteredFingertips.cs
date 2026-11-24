@@ -4,8 +4,8 @@ using WaxBall;
 namespace Interaction
 {
     /// <summary>
-    /// 손가락 끝 입력(IFingertipSource) 위에 필터를 얹은 입력. 손가락마다 FingertipFilter로 위치를 부드럽게 하고,
-    /// 속도가 비정상이거나 다른 손가락과 겹친 값(가려진 손가락을 추정으로 잘못 찍은 경우)을 거른다.
+    /// 손가락 끝 입력(IFingertipSource) 위에 필터를 얹은 입력. 손가락마다 FingertipFilter로 손목 좌표계에서 위치를 부드럽게 하고,
+    /// 한 프레임짜리 튐을 없애고, 속도가 비정상이거나 다른 손가락과 겹친 값(가려진 손가락을 추정으로 잘못 찍은 경우)을 거른다.
     /// 자기도 IFingertipSource라서 뒤쪽 어댑터는 원본이든 필터 결과든 같은 방식으로 읽는다.
     /// 손가락 끝에 작은 흰 구(필터 결과)를 띄운다. 이번 프레임에 값을 거르면 주황색이 된다.
     /// </summary>
@@ -35,6 +35,13 @@ namespace Interaction
         private readonly bool[] suspect = new bool[WaxBallStateMachine.FingerCount];
         private Renderer[] markerRenderers;
         private MaterialPropertyBlock block;
+        private bool lastHadPose;
+        private int speedRejectTotal;
+        private int overlapRejectTotal;
+
+        /// <summary>속도 제한 때문에 거른 프레임 수와 손가락 겹침 때문에 거른 프레임 수(누적). 어느 쪽이 거르는지 보려는 값이다.</summary>
+        public int SpeedRejectTotal => speedRejectTotal;
+        public int OverlapRejectTotal => overlapRejectTotal;
 
         private void Awake()
         {
@@ -57,6 +64,16 @@ namespace Interaction
             var t = Tuning;
             float dt = Time.deltaTime;
 
+            // 손목 좌표계에서 필터링한다. 손 전체가 같이 움직이는 것은 손가락 끝의 상대 위치를 바꾸지 않으므로 튄 값으로 거르지 않고,
+            // 손가락끼리의 움직임(진짜 튐이나 가려짐 오류)만 검사한다. 손 자세를 못 주는 입력은 월드 좌표로 필터링한다.
+            bool hasPose = sourceInterface.TryGetHandPose(out Vector3 wristPosition, out Quaternion wristRotation);
+            if (hasPose != lastHadPose)
+            {
+                for (int i = 0; i < filters.Length; i++) filters[i].Reset();
+                lastHadPose = hasPose;
+            }
+            Quaternion inverse = hasPose ? Quaternion.Inverse(wristRotation) : Quaternion.identity;
+
             for (int i = 0; i < filters.Length; i++)
             {
                 sourceInterface.TryGetFingertip((WaxFinger)i, out FingertipSample sample);
@@ -70,8 +87,10 @@ namespace Interaction
                     filteredSamples[i] = default;
                     continue;
                 }
+
+                Vector3 input = hasPose ? inverse * (sample.worldPosition - wristPosition) : sample.worldPosition;
                 float minCutoff = t.fingertipMinCutoff * (sample.highConfidence ? 1f : t.fingertipLowConfidenceScale);
-                filters[i].Begin(sample.worldPosition, dt, minCutoff, t.fingertipBeta, t.fingertipMaxSpeed);
+                filters[i].Begin(input, dt, minCutoff, t.fingertipBeta, t.fingertipMaxSpeed);
             }
 
             // 두 손가락 끝이 겹치면(실제 손가락은 같은 자리에 있을 수 없다) 최근에 더 많이 움직인 쪽을 의심한다.
@@ -89,12 +108,20 @@ namespace Interaction
             for (int i = 0; i < filters.Length; i++)
             {
                 if (!active[i]) continue;
-                filters[i].Commit(suspect[i] || filters[i].SpeedSuspect, t.fingertipRejectFrames);
+                bool overlap = suspect[i];
+                filters[i].Commit(overlap || filters[i].SpeedSuspect, t.fingertipRejectFrames);
+                if (filters[i].Rejected)
+                {
+                    if (filters[i].SpeedSuspect) speedRejectTotal++;
+                    else if (overlap) overlapRejectTotal++;
+                }
+
+                Vector3 position = filters[i].Position;
                 filteredSamples[i] = new FingertipSample
                 {
                     tracked = true,
                     highConfidence = rawSamples[i].highConfidence,
-                    worldPosition = filters[i].Position
+                    worldPosition = hasPose ? wristPosition + wristRotation * position : position
                 };
             }
 
@@ -114,7 +141,7 @@ namespace Interaction
                 markers[i].position = filteredSamples[i].worldPosition;
                 if (markerRenderers[i] == null) continue;
                 markerRenderers[i].GetPropertyBlock(block);
-                block.SetColor(BaseColorId, filters[i].Rejected ? RejectedColor : FilteredColor);
+                block.SetColor(BaseColorId, filters[i].Rejected || filters[i].Despiked ? RejectedColor : FilteredColor);
                 markerRenderers[i].SetPropertyBlock(block);
             }
         }
@@ -149,6 +176,13 @@ namespace Interaction
         {
             int i = (int)finger;
             return i >= 0 && i < filters.Length && filters[i].Rejected;
+        }
+
+        /// <summary>지금까지 이 손가락에서 한 프레임짜리 튀는 값을 중앙 값으로 바꿔 쓴 프레임 수(앱을 켠 뒤 누적).</summary>
+        public int DespikedCount(WaxFinger finger)
+        {
+            int i = (int)finger;
+            return i >= 0 && i < filters.Length ? filters[i].DespikedTotal : 0;
         }
 
         /// <summary>지금까지 이 손가락의 값을 거른 프레임 수(앱을 켠 뒤 누적).</summary>

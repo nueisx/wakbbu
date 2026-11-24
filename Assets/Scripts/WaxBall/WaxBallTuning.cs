@@ -151,6 +151,9 @@ namespace WaxBall
                  "이 원의 반지름이 쥐는 동안의 기준(가장 컸을 때)의 이 비율보다 작아지면 중심 갱신을 멈추고 마지막 중심을 유지한다. 1에 가까울수록 일찍 멈춘다.")]
         [Range(0.7f, 1f)] public float ballCenterSqueezeTolerance = 0.96f;
 
+        [Tooltip("중심 갱신을 멈춘 동안 새로 계산한 중심이 멈춘 중심에서 이 거리(m) 넘게 벗어나는 상태가 fingertipRejectFrames 넘게 이어지면, 눌림만으로는 설명이 안 되는 어긋남(잘못된 중심에 멈춘 경우)으로 보고 멈춤을 풀고 새 중심으로 다시 시작한다. 눌림 12mm의 밀림이 약 25mm라 그보다 크게 둔다.")]
+        [Range(0.02f, 0.1f)] public float ballCenterFrozenMaxShift = 0.035f;
+
         [Tooltip("공 중심(손목 좌표계)의 느린 움직임 차단 주파수(Hz). 작을수록 여러 프레임을 길게 평균한다.")]
         [Min(0.1f)] public float ballCenterMinCutoff = 1f;
 
@@ -165,8 +168,8 @@ namespace WaxBall
         [Min(0.2f)] public float pinchHoldSeconds = 1f;
 
         [Header("핸드트래킹: 튀는 값 거르기")]
-        [Tooltip("손가락 끝이 이 속도(m/s)를 넘게 움직인 프레임은 튄 값으로 보고 직전 위치를 유지한다.")]
-        [Min(0.5f)] public float fingertipMaxSpeed = 3f;
+        [Tooltip("손가락 끝이 손목 기준으로 이 속도(m/s)를 넘게 움직인 프레임은 튄 값으로 보고 직전 위치를 유지한다(손 전체가 움직이는 것은 해당 없음). 한 프레임짜리 튐은 필터 앞의 중앙 값이 이미 없앤다.")]
+        [Min(0.5f)] public float fingertipMaxSpeed = 1.5f;
 
         [Tooltip("두 손가락 끝이 이 거리(m)보다 가까우면 겹친 것으로 보고, 최근에 더 많이 움직인 쪽을 의심 값으로 거른다.")]
         [Min(0f)] public float fingertipMinSeparation = 0.01f;

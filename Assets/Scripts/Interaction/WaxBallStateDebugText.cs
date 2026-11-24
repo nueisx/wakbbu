@@ -89,10 +89,12 @@ namespace Interaction
             return text + $"\nGap T-I: r {Gap(thumb, index)} f {Gap(fThumb, fIndex)} cm\nGap T-M: r {Gap(thumb, middle)} f {Gap(fThumb, fMiddle)} cm";
         }
 
-        // 필터가 튄 값으로 보고 거른 프레임 수(엄지, 검지, 중지).
+        // Rej: 필터가 값을 거른 프레임 수(엄지, 검지, 중지)와 이유(spd 속도 제한, ovl 손가락 겹침).
+        // Spk: 한 프레임짜리 튀는 값을 중앙 값으로 바꿔 쓴 횟수(엄지, 검지, 중지).
         private string FilterText()
         {
-            return $"\nRej: T {filtered.RejectedCount(WaxFinger.Thumb)} I {filtered.RejectedCount(WaxFinger.Index)} M {filtered.RejectedCount(WaxFinger.Middle)}";
+            return $"\nRej: T {filtered.RejectedCount(WaxFinger.Thumb)} I {filtered.RejectedCount(WaxFinger.Index)} M {filtered.RejectedCount(WaxFinger.Middle)} (spd {filtered.SpeedRejectTotal}, ovl {filtered.OverlapRejectTotal})"
+                 + $"\nSpk: T {filtered.DespikedCount(WaxFinger.Thumb)} I {filtered.DespikedCount(WaxFinger.Index)} M {filtered.DespikedCount(WaxFinger.Middle)}";
         }
 
         // 공 중심: 모드, 쥐고 있는 손가락 수(0이면 안 쥔 것), 진짜 중심을 아는 시험 씬에서는 추정 오차(mm)와 중심을 거른 프레임 수.

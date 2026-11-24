@@ -46,7 +46,7 @@ MonoBehaviour:
   fingertipMinCutoff: 1.5
   fingertipBeta: 20
   fingertipLowConfidenceScale: 0.5
-  fingertipMaxSpeed: 3
+  fingertipMaxSpeed: 1.5
   fingertipMinSeparation: 0.01
   fingertipRejectFrames: 6
   ballFingertipPadOffset: 0.008
@@ -56,3 +56,4 @@ MonoBehaviour:
   ballCenterMaxSpeed: 1.5
   pinchHoldSeconds: 1
   ballCenterSqueezeTolerance: 0.96
+  ballCenterFrozenMaxShift: 0.035

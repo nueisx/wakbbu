@@ -38,6 +38,7 @@ namespace Interaction
         private bool wasHolding;
         private int lastTipCount;
         private float spreadReference;
+        private int frozenShiftRun;
 
         /// <summary>추정한(평균한) 공 중심(월드). HasCenter일 때만 의미가 있다.</summary>
         public Vector3 Center { get; private set; }
@@ -109,14 +110,32 @@ namespace Interaction
                 Holding = true;
                 HoldingTipCount = count;
 
-                // 쥐는 동안 가장 컸던 퍼짐을 기준으로 삼는다(쥐기 시작할 때와 손가락 수가 바뀔 때 다시 잡고, 아래쪽으로는 천천히 따라간다).
-                if (!wasHolding || count != lastTipCount || spread > spreadReference) spreadReference = spread;
+                // 쥐는 동안 가장 컸던 퍼짐을 기준으로 삼는다. 쥐기 시작할 때와 손가락 수가 바뀔 때 다시 잡고,
+                // 커지는 쪽은 초당 100%까지만(튀는 값 하나가 기준을 부풀리지 못하게), 줄어드는 쪽은 천천히 따라간다.
+                if (!wasHolding || count != lastTipCount) spreadReference = spread;
+                else if (spread > spreadReference) spreadReference = Mathf.MoveTowards(spreadReference, spread, spreadReference * Time.deltaTime);
                 else spreadReference = Mathf.Lerp(spreadReference, spread, Time.deltaTime * 0.2f);
 
+                Vector3 local = Quaternion.Inverse(wristRotation) * (raw - wristPosition);
+
                 // 공이 눌려 퍼짐이 기준보다 작아지면 중심 추정이 밀리므로 갱신하지 않고 마지막 중심을 유지한다.
-                if (spread >= spreadReference * t.ballCenterSqueezeTolerance || !haveCenter)
+                bool reliable = spread >= spreadReference * t.ballCenterSqueezeTolerance || !haveCenter;
+
+                // 멈춘 중심과 새로 계산한 중심이 눌림으로는 설명이 안 될 만큼 계속 벌어져 있으면 잘못된 중심에 멈춘 것이니 풀고 다시 시작한다.
+                if (!reliable)
                 {
-                    Vector3 local = Quaternion.Inverse(wristRotation) * (raw - wristPosition);
+                    frozenShiftRun = (local - centerFilter.Position).magnitude > t.ballCenterFrozenMaxShift ? frozenShiftRun + 1 : 0;
+                    if (frozenShiftRun >= t.fingertipRejectFrames)
+                    {
+                        reliable = true;
+                        spreadReference = spread;
+                        centerFilter.Reset();
+                    }
+                }
+                else frozenShiftRun = 0;
+
+                if (reliable)
+                {
                     centerFilter.Begin(local, Time.deltaTime, t.ballCenterMinCutoff, t.ballCenterBeta, t.ballCenterMaxSpeed);
                     centerFilter.Commit(centerFilter.SpeedSuspect, t.fingertipRejectFrames);
                     haveCenter = true;
