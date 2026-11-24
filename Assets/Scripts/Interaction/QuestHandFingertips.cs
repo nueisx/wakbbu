@@ -23,6 +23,7 @@ namespace Interaction
         private static readonly Color LowConfidenceColor = new Color(0.6f, 0.6f, 0.6f);
 
         private readonly Transform[] tips = new Transform[WaxBallStateMachine.FingerCount];
+        private Transform wrist;
         private Renderer[] markerRenderers;
         private MaterialPropertyBlock block;
         private int cachedBoneCount = -1;
@@ -77,6 +78,18 @@ namespace Interaction
             return true;
         }
 
+        public bool TryGetHandPose(out Vector3 position, out Quaternion rotation)
+        {
+            position = default;
+            rotation = Quaternion.identity;
+            if (hand == null || skeleton == null || wrist == null) return false;
+            if (!hand.IsTracked || !skeleton.IsInitialized || !skeleton.IsDataValid) return false;
+
+            position = wrist.position;
+            rotation = wrist.rotation;
+            return true;
+        }
+
         private static OVRHand.HandFinger ToHandFinger(WaxFinger finger)
         {
             switch (finger)
@@ -94,6 +107,7 @@ namespace Interaction
             {
                 cachedBoneCount = -1;
                 System.Array.Clear(tips, 0, tips.Length);
+                wrist = null;
                 return;
             }
 
@@ -106,6 +120,13 @@ namespace Interaction
             var ids = openXr
                 ? new[] { OVRSkeleton.BoneId.XRHand_ThumbTip, OVRSkeleton.BoneId.XRHand_IndexTip, OVRSkeleton.BoneId.XRHand_MiddleTip }
                 : new[] { OVRSkeleton.BoneId.Hand_ThumbTip, OVRSkeleton.BoneId.Hand_IndexTip, OVRSkeleton.BoneId.Hand_MiddleTip };
+
+            var wristId = openXr ? OVRSkeleton.BoneId.XRHand_Wrist : OVRSkeleton.BoneId.Hand_WristRoot;
+            wrist = null;
+            foreach (var bone in skeleton.Bones)
+            {
+                if (bone.Id == wristId) { wrist = bone.Transform; break; }
+            }
 
             for (int f = 0; f < tips.Length; f++)
             {

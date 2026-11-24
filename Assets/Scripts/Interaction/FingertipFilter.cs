@@ -1,10 +1,9 @@
 using UnityEngine;
-using WaxBall;
 
 namespace Interaction
 {
     /// <summary>
-    /// 손가락 끝 하나의 위치 필터. One Euro 필터(느릴 때는 떨림을 강하게 누르고, 빠를 때는 지연 없이 따라감)와
+    /// 3D 위치 하나의 필터(손가락 끝, 공 중심). One Euro 필터(느릴 때는 떨림을 강하게 누르고, 빠를 때는 지연 없이 따라감)와
     /// 튄 값 거르기(속도 제한, 겹침 의심)를 한다. 값이 튀면 직전 위치를 유지하고, 의심이 오래 계속되면 진짜 움직임으로 인정한다.
     /// 사용 순서: 프레임마다 Begin(원본 위치) → (바깥에서 다른 손가락과의 겹침 검사) → Commit(의심 여부).
     /// 장비와 무관하므로 나중에 장갑 tracking 위치에도 같이 쓸 수 있다.
@@ -54,7 +53,11 @@ namespace Interaction
             Motion = 0f;
         }
 
-        public void Begin(Vector3 raw, float dt, bool lowConfidence, WaxBallTuning tuning)
+        /// <summary>
+        /// 이번 프레임 원본 값을 받아 후보 위치를 계산한다. minCutoff는 느린 움직임의 차단 주파수(Hz), beta는 빠를수록 차단 주파수를 올리는 정도,
+        /// maxSpeed(m/s)를 넘게 움직인 프레임은 의심 값(SpeedSuspect)이다. 손가락 끝뿐 아니라 어떤 3D 위치에도 쓴다(공 중심 등).
+        /// </summary>
+        public void Begin(Vector3 raw, float dt, float minCutoff, float beta, float maxSpeed)
         {
             rawPosition = raw;
             dt = Mathf.Max(dt, 1e-3f);
@@ -69,12 +72,11 @@ namespace Interaction
             }
 
             Motion = (raw - position).magnitude;
-            SpeedSuspect = Motion / dt > tuning.fingertipMaxSpeed;
+            SpeedSuspect = Motion / dt > maxSpeed;
 
             Vector3 rawVelocity = (raw - lastRaw) / dt;
             candidateVelocity = Vector3.Lerp(velocity, rawVelocity, Alpha(DerivativeCutoff, dt));
-            float cutoff = tuning.fingertipMinCutoff + tuning.fingertipBeta * candidateVelocity.magnitude;
-            if (lowConfidence) cutoff *= tuning.fingertipLowConfidenceScale;
+            float cutoff = minCutoff + beta * candidateVelocity.magnitude;
             candidatePosition = Vector3.Lerp(position, raw, Alpha(cutoff, dt));
         }
 

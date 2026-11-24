@@ -18,5 +18,11 @@ namespace Interaction
     public interface IFingertipSource
     {
         bool TryGetFingertip(WaxFinger finger, out FingertipSample sample);
+
+        /// <summary>
+        /// 손 기준 자세(손목의 월드 위치와 회전). 공 중심은 손바닥 쪽에 있으므로 어느 쪽이 손바닥인지 알려 주는 기준이고,
+        /// 중심을 손 좌표계에서 평균하는 데도 쓴다. 추적이 안 되면 false.
+        /// </summary>
+        bool TryGetHandPose(out Vector3 position, out Quaternion rotation);
     }
 }

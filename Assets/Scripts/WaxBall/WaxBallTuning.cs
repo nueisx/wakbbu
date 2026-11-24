@@ -137,8 +137,32 @@ namespace WaxBall
         [Tooltip("손가락 끝이 빠를수록 차단 주파수를 올리는 정도(Hz per m/s). 클수록 빠른 움직임을 지연 없이 따라간다.")]
         [Min(0f)] public float fingertipBeta = 20f;
 
-        [Tooltip("손가락 신뢰도가 Low일 때 차단 주파수에 곱하는 값. 작을수록 더 강하게 부드럽게 한다.")]
+        [Tooltip("손가락 신뢰도가 Low일 때 느린 움직임의 차단 주파수(fingertipMinCutoff)에 곱하는 값. 작을수록 더 강하게 부드럽게 한다.")]
         [Range(0.05f, 1f)] public float fingertipLowConfidenceScale = 0.5f;
+
+        [Header("핸드트래킹: 공 중심 계산 (Follow Hand)")]
+        [Tooltip("손가락 끝 뼈가 공 표면에서 떨어져 있는 거리(m). 뼈 끝점은 손가락 살 안쪽에 있어서 공 표면에서 이만큼 바깥이다. 캘리브레이션(2c)으로 맞춘다.")]
+        [Range(0f, 0.03f)] public float ballFingertipPadOffset = 0.008f;
+
+        [Tooltip("세 손가락 끝 사이 거리가 (공 지름 + 보정) × 이 값보다 크면 공을 쥔 게 아니라고 본다(펴진 손에서 공이 튀지 않게).")]
+        [Range(1f, 2f)] public float ballHoldSpanScale = 1.4f;
+
+        [Tooltip("손가락 끝이 공을 눌러 안쪽으로 들어가면 세 점을 지나는 원이 작아지고 중심 추정이 손바닥 쪽으로 밀린다(눌림 1mm에 약 2mm). " +
+                 "이 원의 반지름이 쥐는 동안의 기준(가장 컸을 때)의 이 비율보다 작아지면 중심 갱신을 멈추고 마지막 중심을 유지한다. 1에 가까울수록 일찍 멈춘다.")]
+        [Range(0.7f, 1f)] public float ballCenterSqueezeTolerance = 0.96f;
+
+        [Tooltip("공 중심(손목 좌표계)의 느린 움직임 차단 주파수(Hz). 작을수록 여러 프레임을 길게 평균한다.")]
+        [Min(0.1f)] public float ballCenterMinCutoff = 1f;
+
+        [Tooltip("공 중심이 빠를수록 차단 주파수를 올리는 정도(Hz per m/s).")]
+        [Min(0f)] public float ballCenterBeta = 10f;
+
+        [Tooltip("공 중심이 이 속도(m/s)를 넘게 움직인 프레임은 튄 값으로 보고 직전 위치를 유지한다.")]
+        [Min(0.1f)] public float ballCenterMaxSpeed = 1.5f;
+
+        [Header("핸드트래킹: 왼손 핀치 제스처")]
+        [Tooltip("왼손 엄지-검지 핀치를 이 시간(초) 동안 누르고 있으면 리셋한다. 누르는 동안 진행 원이 채워진다.")]
+        [Min(0.2f)] public float pinchHoldSeconds = 1f;
 
         [Header("핸드트래킹: 튀는 값 거르기")]
         [Tooltip("손가락 끝이 이 속도(m/s)를 넘게 움직인 프레임은 튄 값으로 보고 직전 위치를 유지한다.")]

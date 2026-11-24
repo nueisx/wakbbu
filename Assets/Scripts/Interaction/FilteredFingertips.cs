@@ -70,7 +70,8 @@ namespace Interaction
                     filteredSamples[i] = default;
                     continue;
                 }
-                filters[i].Begin(sample.worldPosition, dt, !sample.highConfidence, t);
+                float minCutoff = t.fingertipMinCutoff * (sample.highConfidence ? 1f : t.fingertipLowConfidenceScale);
+                filters[i].Begin(sample.worldPosition, dt, minCutoff, t.fingertipBeta, t.fingertipMaxSpeed);
             }
 
             // 두 손가락 끝이 겹치면(실제 손가락은 같은 자리에 있을 수 없다) 최근에 더 많이 움직인 쪽을 의심한다.
@@ -126,6 +127,14 @@ namespace Interaction
             if (i < 0 || i >= filteredSamples.Length) return false;
             sample = filteredSamples[i];
             return sample.tracked;
+        }
+
+        /// <summary>손 기준 자세(손목). 원본 입력이 주는 값을 그대로 전달한다.</summary>
+        public bool TryGetHandPose(out Vector3 position, out Quaternion rotation)
+        {
+            position = default;
+            rotation = Quaternion.identity;
+            return sourceInterface != null && sourceInterface.TryGetHandPose(out position, out rotation);
         }
 
         /// <summary>필터 전 원본 손가락 끝(이번 프레임).</summary>
