@@ -29,7 +29,7 @@ public static class WaxBallQuestSceneBuilder
 
     // 디버그 텍스트: 캔버스 한 변 픽셀과 월드 크기(m/픽셀). 500px x 0.0003 = 15cm.
     private const float CanvasScale = 0.0003f;
-    private static readonly Vector2 CanvasSize = new Vector2(500f, 520f);
+    private static readonly Vector2 CanvasSize = new Vector2(500f, 580f);
     private const float CanvasOffsetX = 0.12f;
 
     [MenuItem("WaxBall/Create Quest WaxBall Scene")]
@@ -54,7 +54,7 @@ public static class WaxBallQuestSceneBuilder
         WaxBallTuningTools.AssignToOpenScene();
         CreateInput(machine);
         CreateFakeFingersInactive(ball.transform, contacts, machine);
-        var fingertips = CreateHandTracking();
+        var fingertips = CreateHandTracking(ball.transform, machine);
         CreateDebugCanvas(ball.transform, machine, damage, fingertips);
 
         AddToBuildSettings();
@@ -103,7 +103,7 @@ public static class WaxBallQuestSceneBuilder
     }
 
     // 양손 뼈대 표시와 오른손 손가락 끝 표시. 손 모양(메시)은 끄고 뼈대만 보인다(패스스루의 실제 손과 겹쳐 가리지 않게).
-    private static QuestHandFingertips CreateHandTracking()
+    private static QuestHandFingertips CreateHandTracking(Transform ball, WaxBallStateMachine machine)
     {
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(HandPrefabPath);
         if (prefab == null)
@@ -112,7 +112,7 @@ public static class WaxBallQuestSceneBuilder
             return null;
         }
 
-        AddHand(prefab, "LeftHandAnchor", "LeftHandTracking", OVRHand.Hand.HandLeft);
+        var left = AddHand(prefab, "LeftHandAnchor", "LeftHandTracking", OVRHand.Hand.HandLeft);
         var right = AddHand(prefab, "RightHandAnchor", "RightHandTracking", OVRHand.Hand.HandRight);
         if (right == null) return null;
 
@@ -159,6 +159,22 @@ public static class WaxBallQuestSceneBuilder
         var recorder = root.AddComponent<FingertipRecorder>();
         WaxBallDevSceneBuilder.SetRef(recorder, "filtered", filtered);
         WaxBallDevSceneBuilder.SetRef(recorder, "hand", tracker);
+
+        // 공 중심 계산(Follow Hand)과 왼손 엄지-검지 핀치 리셋(진행 원은 왼손 위에 뜬다).
+        var tuning = WaxBallTuningTools.LoadOrCreate();
+        var estimator = root.AddComponent<BallCenterEstimator>();
+        WaxBallDevSceneBuilder.SetRef(estimator, "tuning", tuning);
+        WaxBallDevSceneBuilder.SetRef(estimator, "source", filtered);
+        WaxBallDevSceneBuilder.SetRef(estimator, "ball", ball);
+
+        var gesture = root.AddComponent<HandPinchGesture>();
+        WaxBallDevSceneBuilder.SetRef(gesture, "tuning", tuning);
+        if (left != null) WaxBallDevSceneBuilder.SetRef(gesture, "leftHand", left.GetComponent<OVRHand>());
+        var ring = new GameObject("ResetRing").AddComponent<PinchProgressRing>();
+        ring.transform.SetParent(root.transform, false);
+        if (left != null) WaxBallDevSceneBuilder.SetRef(ring, "anchor", left.transform);
+        WaxBallDevSceneBuilder.SetRef(gesture, "resetRing", ring);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(gesture.OnReset, machine.ResetBall);
         return tracker;
     }
 
@@ -199,7 +215,7 @@ public static class WaxBallQuestSceneBuilder
         return instance;
     }
 
-    private static Material LoadOrCreateMarkerMaterial()
+    internal static Material LoadOrCreateMarkerMaterial()
     {
         var material = AssetDatabase.LoadAssetAtPath<Material>(MarkerMaterialPath);
         if (material != null) return material;

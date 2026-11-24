@@ -17,6 +17,8 @@ namespace Interaction
         [SerializeField] private FilteredFingertips filtered;
         [Tooltip("선택 사항. 비워 두면 씬에서 자동으로 찾는다. 연결하면 CSV 기록 상태와 지금 해야 할 동작을 표시한다.")]
         [SerializeField] private FingertipRecorder recorder;
+        [Tooltip("선택 사항. 비워 두면 씬에서 자동으로 찾는다. 연결하면 공 중심 모드, 쥔 손가락 수, 추정 오차를 표시한다.")]
+        [SerializeField] private BallCenterEstimator estimator;
         [Tooltip("켜면 FPS와 프레임 간격(ms)을 표시한다. 화면 주사율 기준이라 GPU 여유는 OVR Metrics Tool로 따로 본다.")]
         [SerializeField] private bool showFps;
 
@@ -33,6 +35,7 @@ namespace Interaction
             if (fingertips == null) fingertips = FindObjectOfType<QuestHandFingertips>();
             if (filtered == null) filtered = FindObjectOfType<FilteredFingertips>();
             if (recorder == null) recorder = FindObjectOfType<FingertipRecorder>();
+            if (estimator == null) estimator = FindObjectOfType<BallCenterEstimator>();
         }
 
         private void OnEnable()
@@ -83,10 +86,21 @@ namespace Interaction
             filtered.TryGetFingertip(WaxFinger.Thumb, out FingertipSample fThumb);
             filtered.TryGetFingertip(WaxFinger.Index, out FingertipSample fIndex);
             filtered.TryGetFingertip(WaxFinger.Middle, out FingertipSample fMiddle);
-            text += $"\nGap T-I: r {Gap(thumb, index)} f {Gap(fThumb, fIndex)} cm\nGap T-M: r {Gap(thumb, middle)} f {Gap(fThumb, fMiddle)} cm";
-            text += $"\nRej: T {filtered.RejectedCount(WaxFinger.Thumb)} I {filtered.RejectedCount(WaxFinger.Index)} M {filtered.RejectedCount(WaxFinger.Middle)}";
-            if (recorder != null) text += "\n" + recorder.StatusText;
-            return text;
+            return text + $"\nGap T-I: r {Gap(thumb, index)} f {Gap(fThumb, fIndex)} cm\nGap T-M: r {Gap(thumb, middle)} f {Gap(fThumb, fMiddle)} cm";
+        }
+
+        // 필터가 튄 값으로 보고 거른 프레임 수(엄지, 검지, 중지).
+        private string FilterText()
+        {
+            return $"\nRej: T {filtered.RejectedCount(WaxFinger.Thumb)} I {filtered.RejectedCount(WaxFinger.Index)} M {filtered.RejectedCount(WaxFinger.Middle)}";
+        }
+
+        // 공 중심: 모드, 쥐고 있는 손가락 수(0이면 안 쥔 것), 진짜 중심을 아는 시험 씬에서는 추정 오차(mm)와 중심을 거른 프레임 수.
+        private string BallText()
+        {
+            string hold = estimator.Holding ? $"hold {estimator.HoldingTipCount}{(estimator.Frozen ? " frozen" : "")}" : "no hold";
+            string error = estimator.ErrorMeters >= 0f ? $", err {estimator.ErrorMeters * 1000f:0.0} mm" : "";
+            return $"\nBall: {estimator.Mode}, {hold}{error}, rej {estimator.RejectedCount}";
         }
 
         private static string Confidence(FingertipSample sample)
@@ -114,6 +128,9 @@ namespace Interaction
             }
 
             if (fingertips != null) text += HandText();
+            if (filtered != null) text += FilterText();
+            if (estimator != null) text += BallText();
+            if (recorder != null) text += "\n" + recorder.StatusText;
 
             if (showFps)
             {
